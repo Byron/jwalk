@@ -1,0 +1,1 @@
+Parallel directory walk experiments in Rust using rayon.
