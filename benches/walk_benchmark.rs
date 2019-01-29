@@ -9,6 +9,7 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
+use walk::ordered_walk;
 use walk::walk;
 use walkdir::WalkDir;
 
@@ -33,6 +34,7 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
+  /*
   c.bench_function("walk_dir", move |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()) {})
   });
@@ -65,6 +67,17 @@ fn walk_benches(c: &mut Criterion) {
       let mut iter = walk(linux_dir()).into_iter();
       iter.next();
       iter.next();
+    })
+  });*/
+
+  c.bench_function("rayon_ordered_walk", |b| {
+    b.iter(|| {
+      let mut count = 0;
+      for each in ordered_walk(linux_dir()).into_iter() {
+        count += 1;
+        //println!("{}", each.path().unwrap().display());
+      }
+      //println!("{}", count);
     })
   });
 }
