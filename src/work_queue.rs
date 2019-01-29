@@ -4,7 +4,7 @@ use std::sync::mpsc::{self, Receiver, SendError, Sender};
 use std::sync::Arc;
 use std::thread;
 
-use crate::ordered_walk::Work;
+use crate::walk::Work;
 
 #[derive(Clone)]
 pub(crate) struct WorkQueue {
@@ -14,6 +14,12 @@ pub(crate) struct WorkQueue {
 }
 
 pub(crate) struct WorkQueueIterator {
+  receiver: Receiver<Work>,
+  work_count: Arc<AtomicUsize>,
+  stop_now: Arc<AtomicBool>,
+}
+
+pub(crate) struct SortedWorkQueueIterator {
   receiver: Receiver<Work>,
   receive_buffer: BinaryHeap<Work>,
   work_count: Arc<AtomicUsize>,
@@ -31,6 +37,24 @@ pub(crate) fn new_work_queue() -> (WorkQueue, WorkQueueIterator) {
       stop_now: stop_now.clone(),
     },
     WorkQueueIterator {
+      receiver,
+      work_count: work_count.clone(),
+      stop_now: stop_now.clone(),
+    },
+  )
+}
+
+pub(crate) fn new_sorted_work_queue() -> (WorkQueue, SortedWorkQueueIterator) {
+  let work_count = Arc::new(AtomicUsize::new(0));
+  let stop_now = Arc::new(AtomicBool::new(false));
+  let (sender, receiver) = mpsc::channel();
+  (
+    WorkQueue {
+      sender,
+      work_count: work_count.clone(),
+      stop_now: stop_now.clone(),
+    },
+    SortedWorkQueueIterator {
       receiver,
       receive_buffer: BinaryHeap::new(),
       work_count: work_count.clone(),
@@ -64,6 +88,16 @@ impl WorkQueueIterator {
   }
 }
 
+impl SortedWorkQueueIterator {
+  fn work_count(&self) -> usize {
+    self.work_count.load(AtomicOrdering::SeqCst)
+  }
+
+  fn is_stop_now(&self) -> bool {
+    self.stop_now.load(AtomicOrdering::SeqCst)
+  }
+}
+
 impl Iterator for WorkQueueIterator {
   type Item = Work;
   fn next(&mut self) -> Option<Work> {
@@ -72,6 +106,26 @@ impl Iterator for WorkQueueIterator {
         return None;
       }
 
+      if let Ok(work) = self.receiver.try_recv() {
+        return Some(work);
+      } else {
+        if self.work_count() == 0 {
+          return None;
+        } else {
+          thread::yield_now();
+        }
+      }
+    }
+  }
+}
+
+impl Iterator for SortedWorkQueueIterator {
+  type Item = Work;
+  fn next(&mut self) -> Option<Work> {
+    loop {
+      if self.is_stop_now() {
+        return None;
+      }
       while let Ok(work) = self.receiver.try_recv() {
         self.receive_buffer.push(work)
       }

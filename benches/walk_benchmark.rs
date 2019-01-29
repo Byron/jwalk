@@ -9,7 +9,6 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
-use walk::ordered_walk;
 use walk::walk;
 use walkdir::WalkDir;
 
@@ -58,9 +57,9 @@ fn walk_benches(c: &mut Criterion) {
         .build_parallel()
         .run(move || Box::new(move |_| ignore::WalkState::Continue));
     })
-  });
+  });*/
 
-  c.bench_function("rayon_walk", |b| b.iter(|| for _ in walk(linux_dir()) {}));
+  /*c.bench_function("rayon_walk", |b| b.iter(|| for _ in walk(linux_dir()) {}));
 
   c.bench_function("rayon_walk_first_two_entries", |b| {
     b.iter(|| {
@@ -70,14 +69,11 @@ fn walk_benches(c: &mut Criterion) {
     })
   });*/
 
-  c.bench_function("rayon_ordered_walk", |b| {
+  c.bench_function("walk", |b| {
     b.iter(|| {
-      let mut count = 0;
-      for each in ordered_walk(linux_dir()).into_iter() {
-        count += 1;
-        //println!("{}", each.path().unwrap().display());
+      for each_dir_contents in walk(linux_dir()).into_iter() {
+        for _each_entry in each_dir_contents.contents.iter() {}
       }
-      //println!("{}", count);
     })
   });
 }
