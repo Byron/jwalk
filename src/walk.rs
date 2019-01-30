@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use alphanumeric_sort;
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -14,32 +13,48 @@ use std::sync::Arc;
 use crate::results_queue::*;
 use crate::work_queue::*;
 
-pub fn walk<P>(path: P) -> impl Iterator<Item = DirEntryContents>
+pub fn walk<P>(path: P) -> impl Iterator<Item = DirEntryContents<usize>>
 where
   P: AsRef<Path>,
 {
-  let (results_queue, results_iterator) = new_sorted_results_queue();
+  parameterized_walk(
+    path,
+    0,
+    |state, _path, entries| {
+      entries.par_sort_by(|a, b| a.file_name().cmp(b.file_name()));
+      state
+    },
+    |_path, _error| true,
+  )
+}
+
+pub fn parameterized_walk<P, S, F, H>(
+  path: P,
+  walk_state: S,
+  process_entries: F,
+  handle_error: H,
+) -> impl Iterator<Item = DirEntryContents<S>>
+where
+  P: AsRef<Path>,
+  S: Send + Clone + 'static,
+  F: Fn(S, &Path, &mut Vec<DirEntry>) -> S + Send + Sync + 'static,
+  H: Fn(&Path, Error) -> bool + Send + Sync + 'static,
+{
+  let (results_queue, results_iterator) = new_results_queue();
   let path = path.as_ref().to_owned();
 
   rayon::spawn(move || {
-    let (work_queue, work_iterator) = new_sorted_work_queue();
-
-    let continue_walk = Arc::new(|_path: &Path, _error: Error| true);
-    let filter_entries = Arc::new(|_path: &Path, _entries: &mut Vec<DirEntry>| {});
-    let sort_entries = Arc::new(|_path: &Path, entries: &mut Vec<DirEntry>| {
-      entries.par_sort_by(|a, b| alphanumeric_sort::compare_os_str(&a.file_name(), &b.file_name()));
-    });
+    let (work_queue, work_iterator) = new_work_queue();
 
     let work_context = WorkContext {
       work_queue,
       results_queue,
-      continue_walk: Some(continue_walk),
-      filter_entries: Some(filter_entries),
-      sort_entries: Some(sort_entries),
+      handle_error: Arc::new(handle_error),
+      process_entries: Arc::new(process_entries),
     };
 
     work_context
-      .push_work(Work::new(path.to_path_buf(), Vec::new()))
+      .push_work(Work::new(path.to_path_buf(), Vec::new(), walk_state))
       .unwrap();
 
     work_iterator
@@ -58,37 +73,45 @@ pub struct DirEntry {
   skip_contents: bool,
 }
 
-pub struct DirEntryContents {
+pub struct DirEntryContents<S> {
+  pub walk_state: S,
   pub path: PathBuf,
   pub index_path: Vec<usize>,
   pub contents: Vec<DirEntry>,
   pub(crate) remaining_folders_with_contents: usize,
 }
 
-pub(crate) struct Work {
-  dir_index_path: Vec<usize>,
+pub(crate) struct Work<S> {
+  walk_state: S,
   dir_path: PathBuf,
+  dir_index_path: Vec<usize>,
 }
 
 #[derive(Clone)]
-struct WorkContext {
-  work_queue: WorkQueue,
-  results_queue: ResultsQueue,
-  continue_walk: Option<Arc<Fn(&Path, Error) -> bool + Send + Sync + 'static>>,
-  filter_entries: Option<Arc<Fn(&Path, &mut Vec<DirEntry>) + Send + Sync + 'static>>,
-  sort_entries: Option<Arc<Fn(&Path, &mut Vec<DirEntry>) + Send + Sync + 'static>>,
+struct WorkContext<S>
+where
+  S: Clone,
+{
+  work_queue: WorkQueue<S>,
+  results_queue: ResultsQueue<S>,
+  handle_error: Arc<Fn(&Path, Error) -> bool + Send + Sync + 'static>,
+  process_entries: Arc<Fn(S, &Path, &mut Vec<DirEntry>) -> S + Send + Sync + 'static>,
 }
 
-fn process_work_new(work: Work, work_context: &WorkContext) {
+fn process_work_new<S>(work: Work<S>, work_context: &WorkContext<S>)
+where
+  S: Send + Clone,
+{
   let Work {
     dir_path,
     dir_index_path,
+    walk_state,
   } = work;
 
   let read_dir = match fs::read_dir(&dir_path) {
     Ok(read_dir) => read_dir,
     Err(err) => {
-      if !work_context.continue_walk(&dir_path, err) {
+      if !work_context.handle_error(&dir_path, err) {
         work_context.stop_now();
       }
       work_context.completed_work_item();
@@ -101,7 +124,7 @@ fn process_work_new(work: Work, work_context: &WorkContext) {
       let entry = match entry_result {
         Ok(entry) => entry,
         Err(err) => {
-          if !work_context.continue_walk(&dir_path, err) {
+          if !work_context.handle_error(&dir_path, err) {
             work_context.stop_now();
           }
           return None;
@@ -111,7 +134,7 @@ fn process_work_new(work: Work, work_context: &WorkContext) {
       let file_type = match entry.file_type() {
         Ok(file_type) => file_type,
         Err(err) => {
-          if !work_context.continue_walk(&entry.path(), err) {
+          if !work_context.handle_error(&entry.path(), err) {
             work_context.stop_now();
           }
           return None;
@@ -122,13 +145,7 @@ fn process_work_new(work: Work, work_context: &WorkContext) {
     })
     .collect();
 
-  if let Some(filter_entries) = &work_context.filter_entries {
-    filter_entries(&dir_path, &mut entries);
-  }
-
-  if let Some(sort_entries) = &work_context.sort_entries {
-    sort_entries(&dir_path, &mut entries);
-  }
+  let walk_state = (work_context.process_entries)(walk_state, &dir_path, &mut entries);
 
   let mut dir_index = 0;
   let generated_work: Vec<_> = entries
@@ -140,7 +157,7 @@ fn process_work_new(work: Work, work_context: &WorkContext) {
         work_path.push(each.file_name());
         work_index_path.push(dir_index);
         dir_index += 1;
-        Some(Work::new(work_path, work_index_path))
+        Some(Work::new(work_path, work_index_path, walk_state.clone()))
       } else {
         None
       }
@@ -148,6 +165,7 @@ fn process_work_new(work: Work, work_context: &WorkContext) {
     .collect();
 
   let dir_entry_contents = DirEntryContents {
+    walk_state: walk_state.clone(),
     path: dir_path,
     index_path: dir_index_path,
     contents: entries,
@@ -166,17 +184,6 @@ fn process_work_new(work: Work, work_context: &WorkContext) {
   }
 
   work_context.completed_work_item();
-}
-
-fn dir_entry_from_path(path: &Path) -> Option<DirEntry> {
-  if let Ok(metadata) = fs::metadata(path) {
-    let file_type = metadata.file_type();
-    return Some(DirEntry::new(
-      path.file_name().unwrap().to_owned(),
-      file_type,
-    ));
-  }
-  None
 }
 
 impl DirEntry {
@@ -201,45 +208,58 @@ impl DirEntry {
   }
 }
 
-impl PartialEq for DirEntryContents {
+impl<S> PartialEq for DirEntryContents<S> {
   fn eq(&self, o: &Self) -> bool {
     self.index_path.eq(&o.index_path)
   }
 }
 
-impl Eq for DirEntryContents {}
+impl<S> Eq for DirEntryContents<S> {}
 
-impl PartialOrd for DirEntryContents {
+impl<S> PartialOrd for DirEntryContents<S> {
   fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
     o.index_path.partial_cmp(&self.index_path)
   }
 }
 
-impl Ord for DirEntryContents {
+impl<S> Ord for DirEntryContents<S> {
   fn cmp(&self, o: &Self) -> Ordering {
     o.index_path.cmp(&self.index_path)
   }
 }
 
-impl Work {
-  fn new(dir_path: PathBuf, dir_index_path: Vec<usize>) -> Work {
+impl<S> DirEntryContents<S> {
+  fn depth(&self) -> usize {
+    self.index_path.len()
+  }
+}
+
+impl<S> Work<S>
+where
+  S: Clone,
+{
+  fn new(dir_path: PathBuf, dir_index_path: Vec<usize>, walk_state: S) -> Work<S> {
     Work {
       dir_path,
       dir_index_path,
+      walk_state,
     }
   }
 }
 
-impl WorkContext {
-  fn continue_walk(&self, path: &Path, error: Error) -> bool {
-    (self.continue_walk.as_ref()).map_or(true, |f| f(path, error))
+impl<S> WorkContext<S>
+where
+  S: Clone,
+{
+  fn handle_error(&self, path: &Path, error: Error) -> bool {
+    (self.handle_error)(path, error)
   }
 
   fn stop_now(&self) {
     self.work_queue.stop_now()
   }
 
-  fn push_work(&self, work: Work) -> Result<(), SendError<Work>> {
+  fn push_work(&self, work: Work<S>) -> Result<(), SendError<Work<S>>> {
     self.work_queue.push(work)
   }
 
@@ -247,26 +267,26 @@ impl WorkContext {
     self.work_queue.completed_work_item()
   }
 
-  fn push_result(&self, result: DirEntryContents) -> Result<(), SendError<DirEntryContents>> {
+  fn push_result(&self, result: DirEntryContents<S>) -> Result<(), SendError<DirEntryContents<S>>> {
     self.results_queue.push(result)
   }
 }
 
-impl PartialEq for Work {
+impl<S> PartialEq for Work<S> {
   fn eq(&self, o: &Self) -> bool {
     self.dir_index_path.eq(&o.dir_index_path)
   }
 }
 
-impl Eq for Work {}
+impl<S> Eq for Work<S> {}
 
-impl PartialOrd for Work {
+impl<S> PartialOrd for Work<S> {
   fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
     o.dir_index_path.partial_cmp(&self.dir_index_path)
   }
 }
 
-impl Ord for Work {
+impl<S> Ord for Work<S> {
   fn cmp(&self, o: &Self) -> Ordering {
     o.dir_index_path.cmp(&self.dir_index_path)
   }
@@ -284,11 +304,14 @@ mod tests {
   #[test]
   fn test() {
     for mut each_dir_contents in walk(linux_dir()).into_iter() {
+      let indent = "  ".repeat(each_dir_contents.depth());
+      println!("{}{:?}", indent, each_dir_contents.index_path);
       for each_entry in each_dir_contents.contents.iter() {
         each_dir_contents.path.push(each_entry.file_name());
-        eprintln!("{}", each_dir_contents.path.display());
+        println!("{}{}", indent, each_dir_contents.path.display());
         each_dir_contents.path.pop();
       }
+      println!("");
     }
   }
 

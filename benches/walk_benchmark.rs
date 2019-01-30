@@ -46,7 +46,7 @@ fn walk_benches(c: &mut Criterion) {
         .build()
       {}
     })
-  });
+  });*/
 
   c.bench_function("par_ignore_walk", move |b| {
     b.iter(|| {
@@ -57,21 +57,19 @@ fn walk_benches(c: &mut Criterion) {
         .build_parallel()
         .run(move || Box::new(move |_| ignore::WalkState::Continue));
     })
-  });*/
-
-  /*c.bench_function("rayon_walk", |b| b.iter(|| for _ in walk(linux_dir()) {}));
-
-  c.bench_function("rayon_walk_first_two_entries", |b| {
-    b.iter(|| {
-      let mut iter = walk(linux_dir()).into_iter();
-      iter.next();
-      iter.next();
-    })
-  });*/
+  });
 
   c.bench_function("walk", |b| {
     b.iter(|| {
       for each_dir_contents in walk(linux_dir()).into_iter() {
+        for _each_entry in each_dir_contents.contents.iter() {}
+      }
+    })
+  });
+
+  c.bench_function("wall_first_10", |b| {
+    b.iter(|| {
+      for each_dir_contents in walk(linux_dir()).into_iter().take(2) {
         for _each_entry in each_dir_contents.contents.iter() {}
       }
     })

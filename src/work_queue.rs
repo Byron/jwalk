@@ -7,26 +7,20 @@ use std::thread;
 use crate::walk::Work;
 
 #[derive(Clone)]
-pub(crate) struct WorkQueue {
-  sender: Sender<Work>,
+pub(crate) struct WorkQueue<S> {
+  sender: Sender<Work<S>>,
   work_count: Arc<AtomicUsize>,
   stop_now: Arc<AtomicBool>,
 }
 
-pub(crate) struct WorkQueueIterator {
-  receiver: Receiver<Work>,
+pub(crate) struct WorkQueueIterator<S> {
+  receiver: Receiver<Work<S>>,
+  receive_buffer: BinaryHeap<Work<S>>,
   work_count: Arc<AtomicUsize>,
   stop_now: Arc<AtomicBool>,
 }
 
-pub(crate) struct SortedWorkQueueIterator {
-  receiver: Receiver<Work>,
-  receive_buffer: BinaryHeap<Work>,
-  work_count: Arc<AtomicUsize>,
-  stop_now: Arc<AtomicBool>,
-}
-
-pub(crate) fn new_work_queue() -> (WorkQueue, WorkQueueIterator) {
+pub(crate) fn new_work_queue<S>() -> (WorkQueue<S>, WorkQueueIterator<S>) {
   let work_count = Arc::new(AtomicUsize::new(0));
   let stop_now = Arc::new(AtomicBool::new(false));
   let (sender, receiver) = mpsc::channel();
@@ -38,24 +32,6 @@ pub(crate) fn new_work_queue() -> (WorkQueue, WorkQueueIterator) {
     },
     WorkQueueIterator {
       receiver,
-      work_count: work_count.clone(),
-      stop_now: stop_now.clone(),
-    },
-  )
-}
-
-pub(crate) fn new_sorted_work_queue() -> (WorkQueue, SortedWorkQueueIterator) {
-  let work_count = Arc::new(AtomicUsize::new(0));
-  let stop_now = Arc::new(AtomicBool::new(false));
-  let (sender, receiver) = mpsc::channel();
-  (
-    WorkQueue {
-      sender,
-      work_count: work_count.clone(),
-      stop_now: stop_now.clone(),
-    },
-    SortedWorkQueueIterator {
-      receiver,
       receive_buffer: BinaryHeap::new(),
       work_count: work_count.clone(),
       stop_now: stop_now.clone(),
@@ -63,8 +39,8 @@ pub(crate) fn new_sorted_work_queue() -> (WorkQueue, SortedWorkQueueIterator) {
   )
 }
 
-impl WorkQueue {
-  pub fn push(&self, work: Work) -> std::result::Result<(), SendError<Work>> {
+impl<S> WorkQueue<S> {
+  pub fn push(&self, work: Work<S>) -> std::result::Result<(), SendError<Work<S>>> {
     self.work_count.fetch_add(1, AtomicOrdering::SeqCst);
     self.sender.send(work)
   }
@@ -78,7 +54,7 @@ impl WorkQueue {
   }
 }
 
-impl WorkQueueIterator {
+impl<S> WorkQueueIterator<S> {
   fn work_count(&self) -> usize {
     self.work_count.load(AtomicOrdering::SeqCst)
   }
@@ -88,44 +64,14 @@ impl WorkQueueIterator {
   }
 }
 
-impl SortedWorkQueueIterator {
-  fn work_count(&self) -> usize {
-    self.work_count.load(AtomicOrdering::SeqCst)
-  }
-
-  fn is_stop_now(&self) -> bool {
-    self.stop_now.load(AtomicOrdering::SeqCst)
-  }
-}
-
-impl Iterator for WorkQueueIterator {
-  type Item = Work;
-  fn next(&mut self) -> Option<Work> {
+impl<S> Iterator for WorkQueueIterator<S> {
+  type Item = Work<S>;
+  fn next(&mut self) -> Option<Work<S>> {
     loop {
       if self.is_stop_now() {
         return None;
       }
 
-      if let Ok(work) = self.receiver.try_recv() {
-        return Some(work);
-      } else {
-        if self.work_count() == 0 {
-          return None;
-        } else {
-          thread::yield_now();
-        }
-      }
-    }
-  }
-}
-
-impl Iterator for SortedWorkQueueIterator {
-  type Item = Work;
-  fn next(&mut self) -> Option<Work> {
-    loop {
-      if self.is_stop_now() {
-        return None;
-      }
       while let Ok(work) = self.receiver.try_recv() {
         self.receive_buffer.push(work)
       }

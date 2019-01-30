@@ -1,77 +1,68 @@
 use std::collections::BinaryHeap;
+use std::marker::PhantomData;
 use std::sync::mpsc::{self, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 
-use crate::walk::{DirEntry, DirEntryContents};
+use crate::walk::DirEntryContents;
 
 #[derive(Clone)]
-pub struct ResultsQueue {
-  sender: Sender<DirEntryContents>,
+pub struct ResultsQueue<S>
+where
+  S: Clone,
+{
+  sender: Sender<DirEntryContents<S>>,
 }
 
-pub struct ResultsQueueIterator {
-  receiver: Receiver<DirEntryContents>,
+pub struct ResultsQueueIterator<S> {
+  next_matcher: NextResultMatcher<S>,
+  receiver: Receiver<DirEntryContents<S>>,
+  receive_buffer: BinaryHeap<DirEntryContents<S>>,
 }
 
-pub struct SortedResultsQueueIterator {
-  receiver: Receiver<DirEntryContents>,
-  receive_buffer: BinaryHeap<DirEntryContents>,
-  next_matcher: SortedResultsQueueNextMatcher,
-}
-
-struct SortedResultsQueueNextMatcher {
+struct NextResultMatcher<S> {
   index_path: Vec<usize>,
   remaining_siblings: Vec<usize>,
+  phantom: PhantomData<S>,
 }
 
-pub fn new_results_queue() -> (ResultsQueue, ResultsQueueIterator) {
-  let (sender, receiver) = mpsc::channel();
-  (ResultsQueue { sender }, ResultsQueueIterator { receiver })
-}
-
-pub fn new_sorted_results_queue() -> (ResultsQueue, SortedResultsQueueIterator) {
+pub fn new_results_queue<S>() -> (ResultsQueue<S>, ResultsQueueIterator<S>)
+where
+  S: Clone,
+{
   let (sender, receiver) = mpsc::channel();
   (
     ResultsQueue { sender },
-    SortedResultsQueueIterator {
+    ResultsQueueIterator {
       receiver,
-      next_matcher: SortedResultsQueueNextMatcher::default(),
+      next_matcher: NextResultMatcher::default(),
       receive_buffer: BinaryHeap::new(),
     },
   )
 }
 
-impl ResultsQueue {
+impl<S> ResultsQueue<S>
+where
+  S: Clone,
+{
   pub fn push(
     &self,
-    dent: DirEntryContents,
-  ) -> std::result::Result<(), SendError<DirEntryContents>> {
+    dent: DirEntryContents<S>,
+  ) -> std::result::Result<(), SendError<DirEntryContents<S>>> {
     self.sender.send(dent)
   }
 }
 
-impl Iterator for ResultsQueueIterator {
-  type Item = DirEntryContents;
-  fn next(&mut self) -> Option<DirEntryContents> {
-    match self.receiver.recv() {
-      Ok(entry) => Some(entry),
-      Err(_) => None,
-    }
-  }
-}
-
-impl Iterator for SortedResultsQueueIterator {
-  type Item = DirEntryContents;
-  fn next(&mut self) -> Option<DirEntryContents> {
+impl<S> Iterator for ResultsQueueIterator<S> {
+  type Item = DirEntryContents<S>;
+  fn next(&mut self) -> Option<DirEntryContents<S>> {
     while self.receive_buffer.peek().map(|i| &i.index_path) != Some(&self.next_matcher.index_path) {
       if self.next_matcher.is_none() {
         return None;
       }
 
       match self.receiver.try_recv() {
-        Ok(dentry) => {
-          self.receive_buffer.push(dentry);
-          return self.receive_buffer.pop();
+        Ok(dir_entry_contents) => {
+          self.receive_buffer.push(dir_entry_contents);
         }
         Err(err) => match err {
           TryRecvError::Empty => thread::yield_now(),
@@ -80,31 +71,31 @@ impl Iterator for SortedResultsQueueIterator {
       }
     }
 
-    if let Some(item) = self.receive_buffer.pop() {
-      self.next_matcher.increment_past(&item);
-      Some(item)
+    if let Some(dir_entry_contents) = self.receive_buffer.pop() {
+      self.next_matcher.increment_past(&dir_entry_contents);
+      Some(dir_entry_contents)
     } else {
       None
     }
   }
 }
 
-impl SortedResultsQueueNextMatcher {
+impl<S> NextResultMatcher<S> {
   fn is_none(&self) -> bool {
     self.index_path.is_empty()
   }
 
-  fn increment_past(&mut self, entry: &DirEntryContents) {
+  fn increment_past(&mut self, dir_entry_contents: &DirEntryContents<S>) {
     // Decrement remaining siblings at this level
     *self.remaining_siblings.last_mut().unwrap() -= 1;
 
-    if entry.remaining_folders_with_contents > 0 {
+    if dir_entry_contents.remaining_folders_with_contents > 0 {
       // If visited item has children then push 0 index path, since we are now
       // looking for the first child.
       self.index_path.push(0);
       self
         .remaining_siblings
-        .push(entry.remaining_folders_with_contents);
+        .push(dir_entry_contents.remaining_folders_with_contents);
     } else {
       // Incrememnt sibling index
       *self.index_path.last_mut().unwrap() += 1;
@@ -122,11 +113,12 @@ impl SortedResultsQueueNextMatcher {
   }
 }
 
-impl Default for SortedResultsQueueNextMatcher {
-  fn default() -> SortedResultsQueueNextMatcher {
-    SortedResultsQueueNextMatcher {
+impl<S> Default for NextResultMatcher<S> {
+  fn default() -> NextResultMatcher<S> {
+    NextResultMatcher {
       index_path: vec![0],
       remaining_siblings: vec![1],
+      phantom: PhantomData,
     }
   }
 }

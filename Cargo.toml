@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 rayon = "1.0.3"
-alphanumeric-sort = "1.0.6"
 
 [dev-dependencies]
 criterion = "0.2.7"
