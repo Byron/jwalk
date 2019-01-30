@@ -1,11 +1,12 @@
 [package]
-name = "walk"
+name = "jwalk"
 version = "0.1.0"
 authors = ["Jesse Grosjean <jesse@hogbaysoftware.com>"]
 edition = "2018"
 
 [dependencies]
 rayon = "1.0.3"
+crossbeam = "0.7.1"
 
 [dev-dependencies]
 criterion = "0.2.7"

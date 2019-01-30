@@ -1,294 +1,101 @@
-#![allow(dead_code)]
-
-use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
-use std::cmp::Ordering;
-use std::ffi::{OsStr, OsString};
-use std::fs::{self, FileType};
-use std::io::Error;
+use std::ffi::OsString;
+use std::fs::FileType;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::SendError;
 use std::sync::Arc;
 
-use crate::results_queue::*;
-use crate::work_queue::*;
+use crate::core::{self, DirListIter, ResultsQueueIter};
 
-pub fn walk<P>(path: P) -> impl Iterator<Item = DirEntryContents<usize>>
-where
-  P: AsRef<Path>,
-{
-  parameterized_walk(
-    path,
-    0,
-    |state, _path, entries| {
-      entries.par_sort_by(|a, b| a.file_name().cmp(b.file_name()));
-      state
-    },
-    |_path, _error| true,
-  )
-}
-
-pub fn parameterized_walk<P, S, F, H>(
-  path: P,
-  walk_state: S,
-  process_entries: F,
-  handle_error: H,
-) -> impl Iterator<Item = DirEntryContents<S>>
-where
-  P: AsRef<Path>,
-  S: Send + Clone + 'static,
-  F: Fn(S, &Path, &mut Vec<DirEntry>) -> S + Send + Sync + 'static,
-  H: Fn(&Path, Error) -> bool + Send + Sync + 'static,
-{
-  let (results_queue, results_iterator) = new_results_queue();
-  let path = path.as_ref().to_owned();
-
-  rayon::spawn(move || {
-    let (work_queue, work_iterator) = new_work_queue();
-
-    let work_context = WorkContext {
-      work_queue,
-      results_queue,
-      handle_error: Arc::new(handle_error),
-      process_entries: Arc::new(process_entries),
-    };
-
-    work_context
-      .push_work(Work::new(path.to_path_buf(), Vec::new(), walk_state))
-      .unwrap();
-
-    work_iterator
-      .par_bridge()
-      .for_each_with(work_context, |work_context, work| {
-        process_work_new(work, &work_context);
-      });
-  });
-
-  results_iterator
+pub struct WalkDir {
+  root: PathBuf,
 }
 
 pub struct DirEntry {
-  file_name: OsString,
-  file_type: FileType,
-  skip_contents: bool,
-}
-
-pub struct DirEntryContents<S> {
-  pub walk_state: S,
-  pub path: PathBuf,
-  pub index_path: Vec<usize>,
-  pub contents: Vec<DirEntry>,
-  pub(crate) remaining_folders_with_contents: usize,
-}
-
-pub(crate) struct Work<S> {
-  walk_state: S,
-  dir_path: PathBuf,
-  dir_index_path: Vec<usize>,
-}
-
-#[derive(Clone)]
-struct WorkContext<S>
-where
-  S: Clone,
-{
-  work_queue: WorkQueue<S>,
-  results_queue: ResultsQueue<S>,
-  handle_error: Arc<Fn(&Path, Error) -> bool + Send + Sync + 'static>,
-  process_entries: Arc<Fn(S, &Path, &mut Vec<DirEntry>) -> S + Send + Sync + 'static>,
-}
-
-fn process_work_new<S>(work: Work<S>, work_context: &WorkContext<S>)
-where
-  S: Send + Clone,
-{
-  let Work {
-    dir_path,
-    dir_index_path,
-    walk_state,
-  } = work;
-
-  let read_dir = match fs::read_dir(&dir_path) {
-    Ok(read_dir) => read_dir,
-    Err(err) => {
-      if !work_context.handle_error(&dir_path, err) {
-        work_context.stop_now();
-      }
-      work_context.completed_work_item();
-      return;
-    }
-  };
-
-  let mut entries: Vec<_> = read_dir
-    .filter_map(|entry_result| {
-      let entry = match entry_result {
-        Ok(entry) => entry,
-        Err(err) => {
-          if !work_context.handle_error(&dir_path, err) {
-            work_context.stop_now();
-          }
-          return None;
-        }
-      };
-
-      let file_type = match entry.file_type() {
-        Ok(file_type) => file_type,
-        Err(err) => {
-          if !work_context.handle_error(&entry.path(), err) {
-            work_context.stop_now();
-          }
-          return None;
-        }
-      };
-
-      Some(DirEntry::new(entry.file_name(), file_type))
-    })
-    .collect();
-
-  let walk_state = (work_context.process_entries)(walk_state, &dir_path, &mut entries);
-
-  let mut dir_index = 0;
-  let generated_work: Vec<_> = entries
-    .iter()
-    .filter_map(|each| {
-      if each.file_type().is_dir() && !each.skip_contents {
-        let mut work_path = dir_path.clone();
-        let mut work_index_path = dir_index_path.clone();
-        work_path.push(each.file_name());
-        work_index_path.push(dir_index);
-        dir_index += 1;
-        Some(Work::new(work_path, work_index_path, walk_state.clone()))
-      } else {
-        None
-      }
-    })
-    .collect();
-
-  let dir_entry_contents = DirEntryContents {
-    walk_state: walk_state.clone(),
-    path: dir_path,
-    index_path: dir_index_path,
-    contents: entries,
-    remaining_folders_with_contents: generated_work.len(),
-  };
-
-  if work_context.push_result(dir_entry_contents).is_err() {
-    work_context.stop_now();
-  }
-
-  for each in generated_work {
-    if work_context.push_work(each).is_err() {
-      work_context.stop_now();
-      return;
-    }
-  }
-
-  work_context.completed_work_item();
+  pub file_name: OsString,
+  pub file_type: FileType,
+  dir_path: Arc<PathBuf>,
 }
 
 impl DirEntry {
-  fn new(file_name: OsString, file_type: FileType) -> DirEntry {
-    DirEntry {
-      file_name,
-      file_type,
-      skip_contents: false,
-    }
-  }
-
-  pub fn file_type(&self) -> &FileType {
-    &self.file_type
-  }
-
-  pub fn file_name(&self) -> &OsStr {
-    &self.file_name
-  }
-
-  pub fn skip_contents(&mut self) {
-    self.skip_contents = true
+  pub fn path(&self) -> PathBuf {
+    let mut path = self.dir_path.to_path_buf();
+    path.push(&self.file_name);
+    path
   }
 }
 
-impl<S> PartialEq for DirEntryContents<S> {
-  fn eq(&self, o: &Self) -> bool {
-    self.index_path.eq(&o.index_path)
-  }
-}
-
-impl<S> Eq for DirEntryContents<S> {}
-
-impl<S> PartialOrd for DirEntryContents<S> {
-  fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-    o.index_path.partial_cmp(&self.index_path)
-  }
-}
-
-impl<S> Ord for DirEntryContents<S> {
-  fn cmp(&self, o: &Self) -> Ordering {
-    o.index_path.cmp(&self.index_path)
-  }
-}
-
-impl<S> DirEntryContents<S> {
-  fn depth(&self) -> usize {
-    self.index_path.len()
-  }
-}
-
-impl<S> Work<S>
-where
-  S: Clone,
-{
-  fn new(dir_path: PathBuf, dir_index_path: Vec<usize>, walk_state: S) -> Work<S> {
-    Work {
-      dir_path,
-      dir_index_path,
-      walk_state,
+impl WalkDir {
+  pub fn new<P: AsRef<Path>>(root: P) -> Self {
+    WalkDir {
+      root: root.as_ref().to_path_buf(),
     }
   }
 }
 
-impl<S> WorkContext<S>
-where
-  S: Clone,
-{
-  fn handle_error(&self, path: &Path, error: Error) -> bool {
-    (self.handle_error)(path, error)
-  }
+impl IntoIterator for WalkDir {
+  type Item = DirEntry;
+  type IntoIter = WalkDirIter;
 
-  fn stop_now(&self) {
-    self.work_queue.stop_now()
-  }
+  fn into_iter(self) -> WalkDirIter {
+    let mut results_queue_iter = core::walk(
+      &self.root,
+      0,
+      |_path, state, mut entries| {
+        entries.par_sort_by(|a, b| a.file_name().cmp(b.file_name()));
+        (state, entries)
+      },
+      |_path, _error| true,
+    );
 
-  fn push_work(&self, work: Work<S>) -> Result<(), SendError<Work<S>>> {
-    self.work_queue.push(work)
-  }
+    let mut dir_list_stack = Vec::new();
+    if let Some(root_dir_list) = results_queue_iter.next() {
+      dir_list_stack.push(root_dir_list.into_iter());
+    }
 
-  fn completed_work_item(&self) {
-    self.work_queue.completed_work_item()
-  }
-
-  fn push_result(&self, result: DirEntryContents<S>) -> Result<(), SendError<DirEntryContents<S>>> {
-    self.results_queue.push(result)
-  }
-}
-
-impl<S> PartialEq for Work<S> {
-  fn eq(&self, o: &Self) -> bool {
-    self.dir_index_path.eq(&o.dir_index_path)
+    WalkDirIter {
+      results_queue_iter,
+      dir_list_stack,
+    }
   }
 }
 
-impl<S> Eq for Work<S> {}
-
-impl<S> PartialOrd for Work<S> {
-  fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-    o.dir_index_path.partial_cmp(&self.dir_index_path)
-  }
+pub struct WalkDirIter {
+  results_queue_iter: ResultsQueueIter<usize>,
+  dir_list_stack: Vec<DirListIter<usize>>,
 }
 
-impl<S> Ord for Work<S> {
-  fn cmp(&self, o: &Self) -> Ordering {
-    o.dir_index_path.cmp(&self.dir_index_path)
+impl Iterator for WalkDirIter {
+  type Item = DirEntry;
+  fn next(&mut self) -> Option<DirEntry> {
+    loop {
+      if self.dir_list_stack.is_empty() {
+        return None;
+      }
+
+      let dir_list_iter = self.dir_list_stack.last_mut().unwrap();
+      let dir_path = dir_list_iter.path.clone();
+
+      if let Some(dir_entry) = dir_list_iter.next() {
+        if dir_entry.has_read_dir {
+          let new_dir_list = self.results_queue_iter.next().unwrap();
+          self.dir_list_stack.push(new_dir_list.into_iter());
+        }
+
+        let core::DirEntry {
+          file_name,
+          file_type,
+          ..
+        } = dir_entry;
+
+        return Some(DirEntry {
+          file_name,
+          file_type,
+          dir_path,
+        });
+      } else {
+        self.dir_list_stack.pop();
+      }
+    }
   }
 }
 
@@ -296,22 +103,28 @@ impl<S> Ord for Work<S> {
 mod tests {
 
   use super::*;
+  use std::thread;
 
   fn linux_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/assets/linux_checkout")
   }
 
+  fn test_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/test_dir")
+  }
+
   #[test]
-  fn test() {
-    for mut each_dir_contents in walk(linux_dir()).into_iter() {
-      let indent = "  ".repeat(each_dir_contents.depth());
-      println!("{}{:?}", indent, each_dir_contents.index_path);
-      for each_entry in each_dir_contents.contents.iter() {
-        each_dir_contents.path.push(each_entry.file_name());
-        println!("{}{}", indent, each_dir_contents.path.display());
-        each_dir_contents.path.pop();
-      }
-      println!("");
+  fn test_walk() {
+    for each in WalkDir::new(test_dir()).into_iter() {
+      println!("{:?}", each.file_name);
+    }
+  }
+
+  #[test]
+  fn test_walk_1() {
+    for _ in WalkDir::new(linux_dir()).into_iter().take(1) {}
+    for _ in 0..10 {
+      thread::yield_now();
     }
   }
 
