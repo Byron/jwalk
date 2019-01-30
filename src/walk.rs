@@ -1,176 +1,131 @@
-use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
-use std::fs::{self, DirEntry};
-use std::io::{Error, Result};
+use std::ffi::OsString;
+use std::fs::FileType;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
-use std::sync::mpsc::{self, Receiver, SendError, Sender};
 use std::sync::Arc;
-use std::thread;
 
-pub fn walk<P: AsRef<Path>>(path: P) -> Receiver<Result<DirEntry>> {
-  let (results_tx, results_rx) = mpsc::channel();
-  let path = path.as_ref().to_owned();
+use crate::core::{self, DirListIter, ResultsQueueIter};
 
-  rayon::spawn(move || {
-    let (work_queue, work_iterator) = new_work_queue();
+pub struct WalkDir {
+  root: PathBuf,
+}
 
-    work_queue
-      .push(Work::new(path))
-      .expect("Iterator owned above");
+pub struct DirEntry {
+  pub file_name: OsString,
+  pub file_type: FileType,
+  dir_path: Arc<PathBuf>,
+}
 
-    work_iterator.par_bridge().for_each_with(
-      (work_queue, results_tx),
-      |(work_queue, results_tx), work| {
-        process_work(work, &work_queue, &results_tx);
+impl DirEntry {
+  pub fn path(&self) -> PathBuf {
+    let mut path = self.dir_path.to_path_buf();
+    path.push(&self.file_name);
+    path
+  }
+}
+
+impl WalkDir {
+  pub fn new<P: AsRef<Path>>(root: P) -> Self {
+    WalkDir {
+      root: root.as_ref().to_path_buf(),
+    }
+  }
+}
+
+impl IntoIterator for WalkDir {
+  type Item = DirEntry;
+  type IntoIter = WalkDirIter;
+
+  fn into_iter(self) -> WalkDirIter {
+    let mut results_queue_iter = core::walk(
+      &self.root,
+      0,
+      |_path, state, mut entries| {
+        entries.par_sort_by(|a, b| a.file_name().cmp(b.file_name()));
+        (state, entries)
       },
+      |_path, _error| true,
     );
-  });
 
-  results_rx
-}
-
-struct Work {
-  path: PathBuf,
-}
-
-#[derive(Clone)]
-struct WorkQueue {
-  sender: Sender<Work>,
-  work_count: Arc<AtomicUsize>,
-  stop_now: Arc<AtomicBool>,
-}
-
-struct WorkQueueIterator {
-  receiver: Receiver<Work>,
-  work_count: Arc<AtomicUsize>,
-  stop_now: Arc<AtomicBool>,
-}
-
-fn process_work(work: Work, work_queue: &WorkQueue, results_tx: &Sender<Result<DirEntry>>) {
-  let read_dir = match fs::read_dir(&work.path) {
-    Ok(read_dir) => read_dir,
-    Err(err) => {
-      if is_to_many_files_open(&err) {
-        work_queue
-          .push(work)
-          .expect("read_dir called by owning iterator");
-      }
-      work_queue.completed_work_item();
-      return;
-    }
-  };
-
-  for entry_result in read_dir {
-    let entry_result = match entry_result {
-      Ok(dent) => Ok(dent),
-      Err(err) => Err(err),
-    };
-
-    let entry = match entry_result {
-      Ok(ref entry) => entry,
-      Err(_) => {
-        break;
-      }
-    };
-
-    let file_type = match entry.file_type() {
-      Ok(file_type) => file_type,
-      Err(_) => {
-        break;
-      }
-    };
-
-    let dir_path = if file_type.is_dir() {
-      Some(entry.path())
-    } else {
-      None
-    };
-
-    if let Some(dir_path) = dir_path {
-      work_queue
-        .push(Work::new(dir_path))
-        .expect("read_dir called by owning iterator");
+    let mut dir_list_stack = Vec::new();
+    if let Some(root_dir_list) = results_queue_iter.next() {
+      dir_list_stack.push(root_dir_list.into_iter());
     }
 
-    if results_tx.send(entry_result).is_err() {
-      work_queue.stop_now();
+    WalkDirIter {
+      results_queue_iter,
+      dir_list_stack,
     }
   }
-
-  work_queue.completed_work_item();
 }
 
-fn new_work_queue() -> (WorkQueue, WorkQueueIterator) {
-  let work_count = Arc::new(AtomicUsize::new(0));
-  let stop_now = Arc::new(AtomicBool::new(false));
-  let (sender, receiver) = mpsc::channel();
-  (
-    WorkQueue {
-      sender,
-      work_count: work_count.clone(),
-      stop_now: stop_now.clone(),
-    },
-    WorkQueueIterator {
-      receiver,
-      work_count: work_count.clone(),
-      stop_now: stop_now.clone(),
-    },
-  )
+pub struct WalkDirIter {
+  results_queue_iter: ResultsQueueIter<usize>,
+  dir_list_stack: Vec<DirListIter<usize>>,
 }
 
-fn is_to_many_files_open(error: &Error) -> bool {
-  error.raw_os_error() == Some(24)
-}
-
-impl Work {
-  fn new(path: PathBuf) -> Work {
-    Work { path }
-  }
-}
-
-impl WorkQueue {
-  pub fn push(&self, work: Work) -> std::result::Result<(), SendError<Work>> {
-    self.work_count.fetch_add(1, AtomicOrdering::SeqCst);
-    self.sender.send(work)
-  }
-
-  fn completed_work_item(&self) {
-    self.work_count.fetch_sub(1, AtomicOrdering::SeqCst);
-  }
-
-  fn stop_now(&self) {
-    self.stop_now.store(true, AtomicOrdering::SeqCst);
-  }
-}
-
-impl WorkQueueIterator {
-  fn work_count(&self) -> usize {
-    self.work_count.load(AtomicOrdering::SeqCst)
-  }
-
-  fn is_stop_now(&self) -> bool {
-    self.stop_now.load(AtomicOrdering::SeqCst)
-  }
-}
-
-impl Iterator for WorkQueueIterator {
-  type Item = Work;
-  fn next(&mut self) -> Option<Work> {
+impl Iterator for WalkDirIter {
+  type Item = DirEntry;
+  fn next(&mut self) -> Option<DirEntry> {
     loop {
-      if self.is_stop_now() {
+      if self.dir_list_stack.is_empty() {
         return None;
       }
-      match self.receiver.try_recv() {
-        Ok(work) => return Some(work),
-        Err(_) => {
-          if self.work_count() == 0 {
-            return None;
-          } else {
-            thread::yield_now();
-          }
+
+      let dir_list_iter = self.dir_list_stack.last_mut().unwrap();
+      let dir_path = dir_list_iter.path.clone();
+
+      if let Some(dir_entry) = dir_list_iter.next() {
+        if dir_entry.has_read_dir {
+          let new_dir_list = self.results_queue_iter.next().unwrap();
+          self.dir_list_stack.push(new_dir_list.into_iter());
         }
+
+        let core::DirEntry {
+          file_name,
+          file_type,
+          ..
+        } = dir_entry;
+
+        return Some(DirEntry {
+          file_name,
+          file_type,
+          dir_path,
+        });
+      } else {
+        self.dir_list_stack.pop();
       }
     }
   }
+}
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+  use std::thread;
+
+  fn linux_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/assets/linux_checkout")
+  }
+
+  fn test_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/test_dir")
+  }
+
+  #[test]
+  fn test_walk() {
+    for each in WalkDir::new(test_dir()).into_iter() {
+      println!("{:?}", each.file_name);
+    }
+  }
+
+  #[test]
+  fn test_walk_1() {
+    for _ in WalkDir::new(linux_dir()).into_iter().take(1) {}
+    for _ in 0..10 {
+      thread::yield_now();
+    }
+  }
+
 }

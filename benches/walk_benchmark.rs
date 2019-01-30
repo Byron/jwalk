@@ -3,15 +3,17 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
+use jwalk::core::walk;
+use jwalk::WalkDir;
 use num_cpus;
+use rayon::prelude::*;
 use std::cmp;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
-use walk::ordered_walk;
-use walk::walk;
-use walkdir::WalkDir;
+use std::thread;
+use walkdir;
 
 fn linux_dir() -> PathBuf {
   PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/assets/linux_checkout")
@@ -34,22 +36,18 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
-  /*
-  c.bench_function("walk_dir", move |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()) {})
+  c.bench_function("walkdir::WalkDir", move |b| {
+    b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
   });
 
-  c.bench_function("ignore_walk", move |b| {
+  c.bench_function("walkdir::WalkDir_sorted", move |b| {
     b.iter(|| {
-      for _ in WalkBuilder::new(linux_dir())
-        .standard_filters(false)
-        .hidden(false)
-        .build()
-      {}
+      for _ in walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name())) {
+      }
     })
   });
 
-  c.bench_function("par_ignore_walk", move |b| {
+  c.bench_function("ignore::WalkParallel", move |b| {
     b.iter(|| {
       WalkBuilder::new(linux_dir())
         .hidden(false)
@@ -60,24 +58,33 @@ fn walk_benches(c: &mut Criterion) {
     })
   });
 
-  c.bench_function("rayon_walk", |b| b.iter(|| for _ in walk(linux_dir()) {}));
+  c.bench_function("jwalk::WalkDir", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()) {})
+  });
 
-  c.bench_function("rayon_walk_first_two_entries", |b| {
-    b.iter(|| {
-      let mut iter = walk(linux_dir()).into_iter();
-      iter.next();
-      iter.next();
-    })
-  });*/
+  c.bench_function("jwalk::WalkDir_1", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).into_iter().take(1) {})
+  });
 
-  c.bench_function("rayon_ordered_walk", |b| {
+  c.bench_function("jwalk::WalkDir_1000", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).into_iter().take(1000) {})
+  });
+
+  c.bench_function("jwalk::core::walk", |b| {
     b.iter(|| {
-      let mut count = 0;
-      for each in ordered_walk(linux_dir()).into_iter() {
-        count += 1;
-        //println!("{}", each.path().unwrap().display());
+      let dir_list_iter = walk(
+        linux_dir(),
+        0,
+        |_path, state, mut entries| {
+          entries.par_sort_by(|a, b| a.file_name().cmp(b.file_name()));
+          (state, entries)
+        },
+        |_path, _error| true,
+      );
+
+      for each_dir_contents in dir_list_iter {
+        for _each_entry in each_dir_contents.contents.iter() {}
       }
-      //println!("{}", count);
     })
   });
 }
