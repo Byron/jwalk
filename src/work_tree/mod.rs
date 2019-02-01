@@ -25,11 +25,11 @@ use work_results_queue::*;
 
 pub trait Delegate: Clone + Send
 where
-  Self::Item: Send,
   Self::Work: Send,
+  Self::Item: Send,
 {
-  type Item;
   type Work;
+  type Item;
   fn perform_work(&self, work: Self::Work, work_context: &WorkContext<Self>);
 }
 
@@ -41,12 +41,13 @@ where
   Work(D::Work),
 }
 
-pub fn process<D>(work: Vec<D::Work>, delegate: D) -> WorkResultsQueueIter<D>
+pub fn process<D>(work: Vec<D::Work>, delegate: D) -> OrderedQueueIter<D::Item>
 where
   D: Delegate + 'static,
   D::Work: Clone, // WHY iS THIS NEEDED? Work shouldn't be cloned
+  D::Item: Clone, // WHY iS THIS NEEDED? Work shouldn't be cloned
 {
-  let (work_results_queue, work_results_iterator) = new_work_results_queue();
+  let (item_queue, item_queue_iter) = new_ordered_queue();
 
   rayon::spawn(move || {
     let (work_queue, work_iterator) = new_ordered_queue();
@@ -57,9 +58,13 @@ where
         .unwrap();
     });
 
+    let index_path = IndexPath::new(Vec::new());
+    let index = 0;
     let work_context = WorkContext {
-      work_results_queue,
+      item_queue,
       work_queue,
+      index_path,
+      index,
     };
 
     work_iterator.par_bridge().for_each_with(
@@ -70,7 +75,7 @@ where
     );
   });
 
-  work_results_iterator
+  item_queue_iter
 }
 
 fn perform_work<D>(delegate: &D, orderd_work: Ordered<D::Work>, work_context: &mut WorkContext<D>)
@@ -79,11 +84,11 @@ where
 {
   let Ordered { value, index_path } = orderd_work;
 
-  //Goal is that when delegate peroforms work it schedules it into the work context in order.
-  //this means index_path nees to be associated with work_context so that push_work nad push_result
-  //can get automatically assigned index paths
-
+  work_context.index_path = index_path;
+  work_context.index = 0;
   delegate.perform_work(value, work_context);
+
+  // Don't push
 
   /*
   let mut dir_list = work.read_dir_list(work_context);
@@ -110,19 +115,39 @@ pub struct WorkContext<D>
 where
   D: Delegate,
 {
-  work_results_queue: WorkResultsQueue<D>,
+  item_queue: OrderedQueue<D::Item>,
   work_queue: OrderedQueue<D::Work>,
+  index_path: IndexPath,
+  index: usize,
+}
+
+pub struct WorkPlaceholder {
+  index_path: IndexPath,
+  remaining_items: usize,
 }
 
 impl<D> WorkContext<D>
 where
   D: Delegate,
 {
-  //fn push_work(&self, work: D::Work, index_path: IndexPath) -> Result<(), SendError<D::Work>> {
-  //self.work_queue.push(work, index_path)
-  //}
+  fn next_index_path(&mut self) -> IndexPath {
+    let index_path = self.index_path.adding(self.index);
+    self.index += 1;
+    index_path
+  }
 
-  fn push_result(&self, result: WorkResults<D>) -> Result<(), SendError<WorkResults<D>>> {
-    self.work_results_queue.push(result)
+  fn push_work(&mut self, work: D::Work) -> Result<(), SendError<Ordered<D::Work>>> {
+    // When work is pushed also need to push placeholder item to items_queue.
+    // This placeholder is used to track how many items the new work generates.
+    let index_path = self.next_index_path();
+    let ordered_work = Ordered::new(work, index_path);
+    self.work_queue.push(ordered_work)
+    self.item_queue.push()
+  }
+
+  fn push_item(&mut self, item: D::Item) -> Result<(), SendError<Ordered<D::Item>>> {
+    let index_path = self.next_index_path();
+    let ordered_item = Ordered::new(item, index_path);
+    self.item_queue.push(ordered_item)
   }
 }

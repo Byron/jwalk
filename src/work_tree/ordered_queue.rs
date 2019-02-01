@@ -17,7 +17,7 @@ where
   stop: Arc<AtomicBool>,
 }
 
-pub(crate) struct OrderedQueueIter<T>
+pub struct OrderedQueueIter<T>
 where
   T: Send,
 {
