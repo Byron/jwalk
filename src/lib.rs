@@ -17,6 +17,7 @@ for entry in WalkDir::new("foo") {
 */
 
 mod walk;
+mod work_tree;
 
 pub mod core;
 

@@ -4,24 +4,24 @@ use std::marker::PhantomData;
 use std::thread;
 
 use super::Delegate;
-use super::DirList;
 use super::IndexPath;
+use super::WorkResults;
 
 #[derive(Clone)]
-pub struct ResultsQueue<D>
+pub struct WorkResultsQueue<D>
 where
   D: Delegate,
 {
-  sender: Sender<DirList<D>>,
+  sender: Sender<WorkResults<D>>,
 }
 
-pub struct ResultsQueueIter<D>
+pub struct WorkResultsQueueIter<D>
 where
   D: Delegate,
 {
   next_matcher: NextResultMatcher<D>,
-  receiver: Receiver<DirList<D>>,
-  receive_buffer: BinaryHeap<DirList<D>>,
+  receiver: Receiver<WorkResults<D>>,
+  receive_buffer: BinaryHeap<WorkResults<D>>,
 }
 
 struct NextResultMatcher<D>
@@ -29,19 +29,19 @@ where
   D: Delegate,
 {
   looking_for_index_path: IndexPath,
-  remaining_read_dirs: Vec<usize>,
+  remaining_work: Vec<usize>,
   phantom: PhantomData<D>,
 }
 
-pub fn new_results_queue<D>() -> (ResultsQueue<D>, ResultsQueueIter<D>)
+pub fn new_work_results_queue<D>() -> (WorkResultsQueue<D>, WorkResultsQueueIter<D>)
 where
   D: Delegate,
 {
   //let (sender, receiver) = channel::bounded(100);
   let (sender, receiver) = channel::unbounded();
   (
-    ResultsQueue { sender },
-    ResultsQueueIter {
+    WorkResultsQueue { sender },
+    WorkResultsQueueIter {
       receiver,
       next_matcher: NextResultMatcher::default(),
       receive_buffer: BinaryHeap::new(),
@@ -49,21 +49,21 @@ where
   )
 }
 
-impl<D> ResultsQueue<D>
+impl<D> WorkResultsQueue<D>
 where
   D: Delegate,
 {
-  pub fn push(&self, dent: DirList<D>) -> std::result::Result<(), SendError<DirList<D>>> {
+  pub fn push(&self, dent: WorkResults<D>) -> std::result::Result<(), SendError<WorkResults<D>>> {
     self.sender.send(dent)
   }
 }
 
-impl<D> Iterator for ResultsQueueIter<D>
+impl<D> Iterator for WorkResultsQueueIter<D>
 where
   D: Delegate,
 {
-  type Item = DirList<D>;
-  fn next(&mut self) -> Option<DirList<D>> {
+  type Item = WorkResults<D>;
+  fn next(&mut self) -> Option<WorkResults<D>> {
     let looking_for = &self.next_matcher.looking_for_index_path;
     loop {
       let top_dir_list = self.receive_buffer.peek();
@@ -105,26 +105,26 @@ where
     self.looking_for_index_path.is_empty()
   }
 
-  fn decrement_remaining_read_dirs_at_this_level(&mut self) {
-    *self.remaining_read_dirs.last_mut().unwrap() -= 1;
+  fn decrement_remaining_work_at_this_level(&mut self) {
+    *self.remaining_work.last_mut().unwrap() -= 1;
   }
 
-  fn increment_past(&mut self, dir_list: &DirList<D>) {
-    self.decrement_remaining_read_dirs_at_this_level();
+  fn increment_past(&mut self, branch: &WorkResults<D>) {
+    self.decrement_remaining_work_at_this_level();
 
-    if dir_list.scheduled_read_dirs > 0 {
+    if branch.scheduled_work > 0 {
       // If visited item has children then push 0 index path, since we are now
       // looking for the first child.
       self.looking_for_index_path.push(0);
-      self.remaining_read_dirs.push(dir_list.scheduled_read_dirs);
+      self.remaining_work.push(branch.scheduled_work);
     } else {
       // Incrememnt sibling index
       self.looking_for_index_path.increment_last();
 
       // If no siblings remain at this level unwind stacks
-      while !self.remaining_read_dirs.is_empty() && *self.remaining_read_dirs.last().unwrap() == 0 {
+      while !self.remaining_work.is_empty() && *self.remaining_work.last().unwrap() == 0 {
         self.looking_for_index_path.pop();
-        self.remaining_read_dirs.pop();
+        self.remaining_work.pop();
         // Finished processing level, so increment sibling index
         if !self.looking_for_index_path.is_empty() {
           self.looking_for_index_path.increment_last();
@@ -140,8 +140,8 @@ where
 {
   fn default() -> NextResultMatcher<D> {
     NextResultMatcher {
-      looking_for_index_path: IndexPath::with_vec(vec![0]),
-      remaining_read_dirs: vec![1],
+      looking_for_index_path: IndexPath::new(vec![0]),
+      remaining_work: vec![1],
       phantom: PhantomData,
     }
   }

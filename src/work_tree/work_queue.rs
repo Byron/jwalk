@@ -1,28 +1,36 @@
 use crossbeam::channel::{self, Receiver, SendError, Sender};
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::thread;
 
-use super::Delegate;
-use super::Work;
+use super::*;
 
 #[derive(Clone)]
 pub(crate) struct WorkQueue<D>
 where
   D: Delegate,
 {
-  sender: Sender<Work<D>>,
+  sender: Sender<OrderedWork<D>>,
   work_count: Arc<AtomicUsize>,
   stop_now: Arc<AtomicBool>,
+}
+
+struct OrderedWork<D>
+where
+  D: Delegate,
+{
+  index_path: IndexPath,
+  work: D::Work,
 }
 
 pub(crate) struct WorkQueueIter<D>
 where
   D: Delegate,
 {
-  receiver: Receiver<Work<D>>,
-  receive_buffer: BinaryHeap<Work<D>>,
+  receiver: Receiver<OrderedWork<D>>,
+  receive_buffer: BinaryHeap<OrderedWork<D>>,
   work_count: Arc<AtomicUsize>,
   stop_now: Arc<AtomicBool>,
 }
@@ -53,9 +61,17 @@ impl<D> WorkQueue<D>
 where
   D: Delegate,
 {
-  pub fn push(&self, work: Work<D>) -> std::result::Result<(), SendError<Work<D>>> {
+  pub fn push(
+    &self,
+    work: D::Work,
+    index_path: IndexPath,
+  ) -> std::result::Result<(), SendError<D::Work>> {
     self.work_count.fetch_add(1, AtomicOrdering::SeqCst);
-    self.sender.send(work)
+    if let Err(err) = self.sender.send(OrderedWork { work, index_path }) {
+      Err(SendError(err.0.work))
+    } else {
+      Ok(())
+    }
   }
 
   pub fn completed_work(&self) {
@@ -84,19 +100,19 @@ impl<D> Iterator for WorkQueueIter<D>
 where
   D: Delegate,
 {
-  type Item = Work<D>;
-  fn next(&mut self) -> Option<Work<D>> {
+  type Item = D::Work;
+  fn next(&mut self) -> Option<D::Work> {
     loop {
       if self.is_stop_now() {
         return None;
       }
 
-      while let Ok(read_dir_work) = self.receiver.try_recv() {
-        self.receive_buffer.push(read_dir_work)
+      while let Ok(ordered_work) = self.receiver.try_recv() {
+        self.receive_buffer.push(ordered_work)
       }
 
-      if let Some(read_dir_work) = self.receive_buffer.pop() {
-        return Some(read_dir_work);
+      if let Some(ordered_work) = self.receive_buffer.pop() {
+        return Some(ordered_work.work);
       } else {
         if self.work_count() == 0 {
           return None;
@@ -105,5 +121,34 @@ where
         }
       }
     }
+  }
+}
+
+impl<D> PartialEq for OrderedWork<D>
+where
+  D: Delegate,
+{
+  fn eq(&self, o: &Self) -> bool {
+    self.index_path.eq(&o.index_path)
+  }
+}
+
+impl<D> Eq for OrderedWork<D> where D: Delegate {}
+
+impl<D> PartialOrd for OrderedWork<D>
+where
+  D: Delegate,
+{
+  fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+    o.index_path.partial_cmp(&self.index_path)
+  }
+}
+
+impl<D> Ord for OrderedWork<D>
+where
+  D: Delegate,
+{
+  fn cmp(&self, o: &Self) -> Ordering {
+    o.index_path.cmp(&self.index_path)
   }
 }

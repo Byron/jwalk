@@ -4,7 +4,7 @@ use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::core::{self, DirListIter, ResultsQueueIter};
+use crate::core::{self, DefaultDelegate, DirListIter, ResultsQueueIter};
 
 pub struct WalkDir {
   root: PathBuf,
@@ -37,15 +37,7 @@ impl IntoIterator for WalkDir {
   type IntoIter = WalkDirIter;
 
   fn into_iter(self) -> WalkDirIter {
-    let mut results_queue_iter = core::walk(
-      &self.root,
-      0,
-      |_path, state, mut entries| {
-        entries.par_sort_by(|a, b| a.file_name().cmp(b.file_name()));
-        (state, entries)
-      },
-      |_path, _error| true,
-    );
+    let mut results_queue_iter = core::walk(&self.root, None, DefaultDelegate {});
 
     let mut dir_list_stack = Vec::new();
     if let Some(root_dir_list) = results_queue_iter.next() {
@@ -60,8 +52,8 @@ impl IntoIterator for WalkDir {
 }
 
 pub struct WalkDirIter {
-  results_queue_iter: ResultsQueueIter<usize>,
-  dir_list_stack: Vec<DirListIter<usize>>,
+  results_queue_iter: ResultsQueueIter<DefaultDelegate>,
+  dir_list_stack: Vec<DirListIter<DefaultDelegate>>,
 }
 
 impl Iterator for WalkDirIter {
@@ -115,17 +107,14 @@ mod tests {
 
   #[test]
   fn test_walk() {
-    for each in WalkDir::new(test_dir()).into_iter() {
-      println!("{:?}", each.file_name);
+    for each in WalkDir::new(linux_dir()).into_iter() {
+      println!("{}", each.path().display());
     }
   }
 
   #[test]
   fn test_walk_1() {
     for _ in WalkDir::new(linux_dir()).into_iter().take(1) {}
-    for _ in 0..10 {
-      thread::yield_now();
-    }
   }
 
 }

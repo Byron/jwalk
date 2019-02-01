@@ -1,41 +1,45 @@
-/*! Provides a more flexible walk function suitable for arbitrary sorting and filtering.
+/*! A flexible walk function suitable for arbitrary sorting/filtering.
 
 # Example
 Recursively iterate over the "foo" directory and print each entry's path:
 
 ```no_run
-use jwalk::core::walk;
+use jwalk::core::{walk, Delegate, DirEntry};
+use std::io::Error;
+use std::path::Path;
 
 # fn main() {
-let dir_list_iter = walk(
-  // Directory to walk
-  "foo",
-  // Initial state value (unused in this example).
-  0,
-  // Sort, filter, maintain per directory state.
-  |path, state, mut entries| {
+#[derive(Clone)]
+pub struct MyDelegate {}
+
+impl Delegate for MyDelegate {
+  type State = usize;
+  fn handle_error(&self, path: &Path, error: &Error) -> bool {
+    eprintln!("{} {}", path.display(), error);
+    true
+  }
+  fn process_entries(&self, path: &Path, state: Self::State, mut entries: Vec<DirEntry>) -> (Self::State, Vec<DirEntry>) {
     entries.sort_by(|a, b| a.file_name().cmp(b.file_name()));
     (state, entries)
-  },
-  // Continue walk on any error
-  |path, error| true,
-);
+  }
+}
 
-for mut each_dir_list in dir_list_iter {
-  for each_entry in each_dir_list.contents.iter() {
-    each_dir_list.path.push(each_entry.file_name());
-    println!("{}", each_dir_list.path.display());
-    each_dir_list.path.pop();
+for mut dir_list in walk("foo", None, MyDelegate {}) {
+  for entry in dir_list.contents.iter() {
+    dir_list.path.push(entry.file_name());
+    println!("{}", dir_list.path.display());
+    dir_list.path.pop();
   }
 }
 # }
 ```
 */
 
+mod delegate;
 mod index_path;
 mod results_queue;
 mod work_queue;
-
+  
 use crossbeam::channel::SendError;
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
@@ -51,6 +55,7 @@ use index_path::*;
 use results_queue::*;
 use work_queue::*;
 
+pub use delegate::{DefaultDelegate, Delegate};
 pub use results_queue::ResultsQueueIter;
 
 /// Recursively walk the given path.
@@ -70,18 +75,12 @@ pub use results_queue::ResultsQueueIter;
 /// filter entries based on that state. And then that cloned state is later
 /// passed in when processing child `DirList`s.
 ///
-/// The returned iterator yields on `DirList` at a time.
-pub fn walk<P, S, F, H>(
-  path: P,
-  state: S,
-  process_entries: F,
-  handle_error: H,
-) -> ResultsQueueIter<S>
+/// Returns iterator of `DirList`s.
+pub fn walk<P, D>(path: P, state: Option<D::State>, delegate: D) -> ResultsQueueIter<D>
 where
   P: AsRef<Path>,
-  S: Send + Clone + 'static,
-  F: Fn(&Path, S, Vec<DirEntry>) -> (S, Vec<DirEntry>) + Send + Sync + 'static,
-  H: Fn(&Path, &Error) -> bool + Send + Sync + 'static,
+  D: Delegate + 'static,
+  D::State: Clone + Send + Default,
 {
   let (results_queue, results_iterator) = new_results_queue();
   let path = path.as_ref().to_owned();
@@ -89,18 +88,17 @@ where
   rayon::spawn(move || {
     let (work_queue, work_iterator) = new_work_queue();
 
-    let work_context = ReadDirWorkContext {
+    let work_context = WorkContext {
+      delegate,
       work_queue,
       results_queue,
-      handle_error: Arc::new(handle_error),
-      process_entries: Arc::new(process_entries),
     };
 
     work_context
-      .push_work(ReadDirWork::new(
+      .push_work(Work::new(
         path.to_path_buf(),
         IndexPath::with_vec(vec![0]),
-        state,
+        state.unwrap_or(D::State::default()),
       ))
       .unwrap();
 
@@ -120,8 +118,11 @@ pub struct DirEntry {
   pub(crate) has_read_dir: bool,
 }
 
-pub struct DirList<S> {
-  pub state: S,
+pub struct DirList<D>
+where
+  D: Delegate,
+{
+  pub state: D::State,
   pub path: PathBuf,
   pub index_path: IndexPath,
   pub contents: Vec<DirEntry>,
@@ -129,43 +130,50 @@ pub struct DirList<S> {
   pub(crate) scheduled_read_dirs: usize,
 }
 
-pub struct DirListIter<S> {
-  pub state: S,
+pub struct DirListIter<D>
+where
+  D: Delegate,
+{
+  pub state: D::State,
   pub path: Arc<PathBuf>,
   pub contents: vec::IntoIter<DirEntry>,
 }
 
-pub(crate) struct ReadDirWork<S> {
-  dir_state: S,
-  dir_path: PathBuf,
-  dir_index_path: IndexPath,
+pub(crate) struct Work<D>
+where
+  D: Delegate,
+{
+  state: D::State,
+  path: PathBuf,
+  index_path: IndexPath,
 }
 
 #[derive(Clone)]
-struct ReadDirWorkContext<S>
+struct WorkContext<D>
 where
-  S: Clone,
+  D: Delegate,
+  D::State: Clone + Send,
 {
-  work_queue: WorkQueue<S>,
-  results_queue: ResultsQueue<S>,
-  handle_error: Arc<Fn(&Path, &Error) -> bool + Send + Sync + 'static>,
-  process_entries: Arc<Fn(&Path, S, Vec<DirEntry>) -> (S, Vec<DirEntry>) + Send + Sync + 'static>,
+  delegate: D,
+  work_queue: WorkQueue<D>,
+  results_queue: ResultsQueue<D>,
 }
 
-fn process_work<S>(work: ReadDirWork<S>, work_context: &ReadDirWorkContext<S>)
+fn process_work<D>(work: Work<D>, work_context: &WorkContext<D>)
 where
-  S: Clone,
+  D: Delegate + Clone,
+  D::State: Clone + Send,
 {
-  let mut read_dir_value = work.read_value(work_context);
-  let generated_read_dir_works = read_dir_value.generate_read_dir_works();
+  let mut dir_list = work.read_dir_list(work_context);
+  let new_work = dir_list.new_work();
 
-  if work_context.push_result(read_dir_value).is_err() {
+  if work_context.push_result(dir_list).is_err() {
     work_context.stop_now();
     work_context.completed_work();
     return;
   }
 
-  for each in generated_read_dir_works {
+  for each in new_work {
     if work_context.push_work(each).is_err() {
       work_context.stop_now();
       return;
@@ -193,17 +201,18 @@ impl DirEntry {
   }
 }
 
-impl<S> DirList<S>
+impl<D> DirList<D>
 where
-  S: Clone,
+  D: Delegate,
+  D::State: Clone + Send,
 {
   pub fn depth(&self) -> usize {
     self.index_path.len()
   }
 
-  fn generate_read_dir_works(&mut self) -> Vec<ReadDirWork<S>> {
+  fn new_work(&mut self) -> Vec<Work<D>> {
     let mut dir_index = 0;
-    let read_dir_works: Vec<_> = self
+    let new_work: Vec<_> = self
       .contents
       .iter()
       .filter_map(|each| {
@@ -213,31 +222,27 @@ where
           work_path.push(each.file_name());
           work_index_path.push(dir_index);
           dir_index += 1;
-          Some(ReadDirWork::new(
-            work_path,
-            work_index_path,
-            self.state.clone(),
-          ))
+          Some(Work::new(work_path, work_index_path, self.state.clone()))
         } else {
           None
         }
       })
       .collect();
 
-    self.scheduled_read_dirs = read_dir_works.len();
+    self.scheduled_read_dirs = new_work.len();
 
-    read_dir_works
+    new_work
   }
 }
 
-impl<S> IntoIterator for DirList<S>
+impl<D> IntoIterator for DirList<D>
 where
-  S: Default,
+  D: Delegate,
 {
   type Item = DirEntry;
-  type IntoIter = DirListIter<S>;
+  type IntoIter = DirListIter<D>;
 
-  fn into_iter(self) -> DirListIter<S> {
+  fn into_iter(self) -> DirListIter<D> {
     DirListIter {
       state: self.state,
       path: Arc::new(self.path),
@@ -246,62 +251,75 @@ where
   }
 }
 
-impl<S> PartialEq for DirList<S> {
+impl<D> PartialEq for DirList<D>
+where
+  D: Delegate,
+{
   fn eq(&self, o: &Self) -> bool {
     self.index_path.eq(&o.index_path)
   }
 }
 
-impl<S> Eq for DirList<S> {}
+impl<D> Eq for DirList<D> where D: Delegate {}
 
-impl<S> PartialOrd for DirList<S> {
+impl<D> PartialOrd for DirList<D>
+where
+  D: Delegate,
+{
   fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
     o.index_path.partial_cmp(&self.index_path)
   }
 }
 
-impl<S> Ord for DirList<S> {
+impl<D> Ord for DirList<D>
+where
+  D: Delegate,
+{
   fn cmp(&self, o: &Self) -> Ordering {
     o.index_path.cmp(&self.index_path)
   }
 }
 
-impl<S> Iterator for DirListIter<S> {
+impl<D> Iterator for DirListIter<D>
+where
+  D: Delegate,
+{
   type Item = DirEntry;
   fn next(&mut self) -> Option<DirEntry> {
     self.contents.next()
   }
 }
 
-impl<S> ReadDirWork<S>
+impl<D> Work<D>
 where
-  S: Clone,
+  D: Delegate,
+  D::State: Clone + Send,
 {
-  fn new(dir_path: PathBuf, dir_index_path: IndexPath, dir_state: S) -> ReadDirWork<S> {
-    ReadDirWork {
-      dir_path,
-      dir_index_path,
-      dir_state,
+  fn new(path: PathBuf, index_path: IndexPath, state: D::State) -> Work<D> {
+    Work {
+      state,
+      path,
+      index_path,
     }
   }
 
-  fn read_value(self, work_context: &ReadDirWorkContext<S>) -> DirList<S> {
-    let ReadDirWork {
-      dir_path,
-      dir_index_path,
-      dir_state,
+  fn read_dir_list(self, work_context: &WorkContext<D>) -> DirList<D> {
+    let Work {
+      path,
+      index_path,
+      state,
     } = self;
 
-    let read_dir = match fs::read_dir(&dir_path) {
+    let read_dir = match fs::read_dir(&path) {
       Ok(read_dir) => read_dir,
       Err(err) => {
-        if !work_context.handle_error(&dir_path, &err) {
+        if !work_context.delegate.handle_error(&path, &err) {
           work_context.stop_now();
         }
         return DirList {
-          state: dir_state.clone(),
-          path: dir_path,
-          index_path: dir_index_path,
+          state: state.clone(),
+          path: path,
+          index_path: index_path,
           contents: Vec::new(),
           contents_error: Some(err),
           scheduled_read_dirs: 0,
@@ -309,37 +327,38 @@ where
       }
     };
 
-    let (dir_state, dir_entries) = (work_context.process_entries)(
-      &dir_path,
-      dir_state,
-      map_entries(&dir_path, read_dir, work_context),
+    let (state, entries) = work_context.delegate.process_entries(
+      &path,
+      state,
+      map_entries(&path, read_dir, work_context),
     );
 
     DirList {
-      state: dir_state.clone(),
-      path: dir_path,
-      index_path: dir_index_path,
-      contents: dir_entries,
+      state: state,
+      path: path,
+      index_path: index_path,
+      contents: entries,
       contents_error: None,
       scheduled_read_dirs: 0,
     }
   }
 }
 
-fn map_entries<S>(
+fn map_entries<D>(
   dir_path: &Path,
   read_dir: fs::ReadDir,
-  work_context: &ReadDirWorkContext<S>,
+  work_context: &WorkContext<D>,
 ) -> Vec<DirEntry>
 where
-  S: Clone,
+  D: Delegate,
+  D::State: Clone + Send,
 {
   read_dir
     .filter_map(|entry_result| {
       let entry = match entry_result {
         Ok(entry) => entry,
         Err(err) => {
-          if !work_context.handle_error(&dir_path, &err) {
+          if !work_context.delegate.handle_error(&dir_path, &err) {
             work_context.stop_now();
           }
           return None;
@@ -349,7 +368,7 @@ where
       let file_type = match entry.file_type() {
         Ok(file_type) => file_type,
         Err(err) => {
-          if !work_context.handle_error(&entry.path(), &err) {
+          if !work_context.delegate.handle_error(&entry.path(), &err) {
             work_context.stop_now();
           }
           return None;
@@ -361,19 +380,20 @@ where
     .collect()
 }
 
-impl<S> ReadDirWorkContext<S>
+impl<D> WorkContext<D>
 where
-  S: Clone,
+  D: Delegate,
+  D::State: Clone + Send,
 {
-  fn handle_error(&self, path: &Path, error: &Error) -> bool {
-    (self.handle_error)(path, error)
-  }
+  //fn handle_error(&self, path: &Path, error: &Error) -> bool {
+  //  (self.handle_error)(path, error)
+  //}
 
   fn stop_now(&self) {
     self.work_queue.stop_now()
   }
 
-  fn push_work(&self, work: ReadDirWork<S>) -> Result<(), SendError<ReadDirWork<S>>> {
+  fn push_work(&self, work: Work<D>) -> Result<(), SendError<Work<D>>> {
     self.work_queue.push(work)
   }
 
@@ -381,27 +401,36 @@ where
     self.work_queue.completed_work()
   }
 
-  fn push_result(&self, result: DirList<S>) -> Result<(), SendError<DirList<S>>> {
+  fn push_result(&self, result: DirList<D>) -> Result<(), SendError<DirList<D>>> {
     self.results_queue.push(result)
   }
 }
 
-impl<S> PartialEq for ReadDirWork<S> {
+impl<D> PartialEq for Work<D>
+where
+  D: Delegate,
+{
   fn eq(&self, o: &Self) -> bool {
-    self.dir_index_path.eq(&o.dir_index_path)
+    self.index_path.eq(&o.index_path)
   }
 }
 
-impl<S> Eq for ReadDirWork<S> {}
+impl<D> Eq for Work<D> where D: Delegate {}
 
-impl<S> PartialOrd for ReadDirWork<S> {
+impl<D> PartialOrd for Work<D>
+where
+  D: Delegate,
+{
   fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-    o.dir_index_path.partial_cmp(&self.dir_index_path)
+    o.index_path.partial_cmp(&self.index_path)
   }
 }
 
-impl<S> Ord for ReadDirWork<S> {
+impl<D> Ord for Work<D>
+where
+  D: Delegate,
+{
   fn cmp(&self, o: &Self) -> Ordering {
-    o.dir_index_path.cmp(&self.dir_index_path)
+    o.index_path.cmp(&self.index_path)
   }
 }

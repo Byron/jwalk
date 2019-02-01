@@ -36,7 +36,7 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
-  c.bench_function("walkdir::WalkDir", move |b| {
+  /*c.bench_function("walkdir::WalkDir", move |b| {
     b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
   });
 
@@ -56,12 +56,13 @@ fn walk_benches(c: &mut Criterion) {
         .build_parallel()
         .run(move || Box::new(move |_| ignore::WalkState::Continue));
     })
-  });
+  });*/
 
   c.bench_function("jwalk::WalkDir", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()) {})
   });
 
+  /*
   c.bench_function("jwalk::WalkDir_1", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()).into_iter().take(1) {})
   });
@@ -86,7 +87,7 @@ fn walk_benches(c: &mut Criterion) {
         for _each_entry in each_dir_contents.contents.iter() {}
       }
     })
-  });
+  });*/
 }
 
 criterion_group! {
