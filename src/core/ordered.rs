@@ -1,15 +1,20 @@
 use std::cmp::Ordering;
 
-use super::IndexPath;
+use super::index_path::IndexPath;
 
 pub struct Ordered<T> {
   pub value: T,
   pub index_path: IndexPath,
+  pub(crate) child_count: usize,
 }
 
 impl<T> Ordered<T> {
-  pub fn new(value: T, index_path: IndexPath) -> Ordered<T> {
-    Ordered { value, index_path }
+  pub fn new(value: T, index_path: IndexPath, child_count: usize) -> Ordered<T> {
+    Ordered {
+      value,
+      index_path,
+      child_count,
+    }
   }
 }
 
