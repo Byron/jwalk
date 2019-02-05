@@ -1,41 +1,47 @@
 use std::cmp::Ordering;
 
 #[derive(Clone, Debug)]
-pub struct IndexPath(pub Vec<usize>);
+pub struct IndexPath {
+  pub indices: Vec<usize>,
+  // Should use Arc<Vec<usize>>
+  //pub child_index: 0, // All children should share parent index
+}
 
 impl IndexPath {
-  pub fn new() -> IndexPath {
-    IndexPath(Vec::new())
+  pub fn new(indices: Vec<usize>) -> IndexPath {
+    IndexPath { indices }
   }
 
-  pub fn with_vec(vec: Vec<usize>) -> IndexPath {
-    IndexPath(vec)
+  pub fn adding(&self, index: usize) -> IndexPath {
+    let mut indices = self.indices.clone();
+    indices.push(index);
+    IndexPath::new(indices)
   }
 
   pub fn push(&mut self, index: usize) {
-    self.0.push(index);
+    self.indices.push(index);
   }
 
   pub fn increment_last(&mut self) {
-    *self.0.last_mut().unwrap() += 1;
+    *self.indices.last_mut().unwrap() += 1;
   }
 
   pub fn pop(&mut self) -> Option<usize> {
-    self.0.pop()
+    self.indices.pop()
   }
 
   pub fn len(&self) -> usize {
-    self.0.len()
+    self.indices.len()
   }
 
   pub fn is_empty(&self) -> bool {
-    self.0.is_empty()
+    self.indices.is_empty()
   }
 }
 
 impl PartialEq for IndexPath {
   fn eq(&self, o: &Self) -> bool {
-    self.0.eq(&o.0)
+    self.indices.eq(&o.indices)
   }
 }
 
@@ -43,12 +49,12 @@ impl Eq for IndexPath {}
 
 impl PartialOrd for IndexPath {
   fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-    self.0.partial_cmp(&o.0)
+    o.indices.partial_cmp(&self.indices)
   }
 }
 
 impl Ord for IndexPath {
   fn cmp(&self, o: &Self) -> Ordering {
-    self.0.cmp(&o.0)
+    o.indices.cmp(&self.indices)
   }
 }
