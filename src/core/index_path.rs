@@ -3,8 +3,6 @@ use std::cmp::Ordering;
 #[derive(Clone, Debug)]
 pub struct IndexPath {
   pub indices: Vec<usize>,
-  // Should use Arc<Vec<usize>>
-  //pub child_index: 0, // All children should share parent index
 }
 
 impl IndexPath {
