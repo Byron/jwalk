@@ -67,7 +67,7 @@ impl IntoIterator for WalkDir {
     let dir_entry_list_iter = core::walk(&self.root, Ignore {}, move |read_dir_spec| {
       let read_dir_iter = match fs::read_dir(&read_dir_spec.path) {
         Ok(read_dir_iter) => read_dir_iter,
-        Err(err) => return Some(Err(err)),
+        Err(err) => return Err(err),
       };
 
       let mut dir_entries: Vec<_> = read_dir_iter
@@ -78,8 +78,8 @@ impl IntoIterator for WalkDir {
           };
 
           let file_type = dir_entry.file_type();
-
           let metadata = LazyCell::new();
+
           if preload_metadata {
             metadata.fill(dir_entry.metadata()).unwrap();
           }
@@ -109,6 +109,7 @@ impl IntoIterator for WalkDir {
         })
         .collect();
 
+      // Sort hardcoded right now
       dir_entries.sort_by(|a, b| match (a, b) {
         (Ok(a), Ok(b)) => a.value.file_name.cmp(&b.value.file_name),
         (Ok(_), Err(_)) => Ordering::Less,
@@ -116,7 +117,7 @@ impl IntoIterator for WalkDir {
         (Err(_), Err(_)) => Ordering::Equal,
       });
 
-      Some(Ok(dir_entries))
+      Ok(dir_entries)
     });
 
     let mut iter = WalkDirIter {

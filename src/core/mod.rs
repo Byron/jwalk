@@ -31,7 +31,7 @@ pub fn walk<P, S, F, E>(path: P, state: S, f: F) -> OrderedQueueIter<ReadDirResu
 where
   P: Into<PathBuf>,
   S: Send + Clone + 'static,
-  F: Fn(ReadDirSpec<S>) -> Option<ReadDirResult<S, E>> + Send + Clone + 'static,
+  F: Fn(ReadDirSpec<S>) -> ReadDirResult<S, E> + Send + Clone + 'static,
   E: Send + 'static,
 {
   let path = path.into();
@@ -69,7 +69,7 @@ fn walk_dir<F, S, E>(
   ordered_read_dir_spec: Ordered<ReadDirSpec<S>>,
   run_context: &mut RunContext<S, E>,
 ) where
-  F: Fn(ReadDirSpec<S>) -> Option<ReadDirResult<S, E>> + Send + Clone + 'static,
+  F: Fn(ReadDirSpec<S>) -> ReadDirResult<S, E> + Send + Clone + 'static,
   S: Send + Clone + 'static,
   E: Send,
 {
@@ -80,13 +80,7 @@ fn walk_dir<F, S, E>(
   } = ordered_read_dir_spec;
 
   // 1. Get read_dir_result from f
-  let read_dir_result: ReadDirResult<S, E> = match f(read_dir_spec) {
-    Some(read_dir_result) => read_dir_result,
-    _ => {
-      run_context.stop();
-      return;
-    }
-  };
+  let read_dir_result = f(read_dir_spec);
 
   // 2. Generate ordered_children_specs from read_dir_result
   let children_specs: Option<Vec<_>> = read_dir_result.as_ref().ok().map(|dir_entries| {
@@ -233,7 +227,7 @@ mod tests {
       let mut dir_entry_results = Vec::new();
       let read_dir_spec_iter = match fs::read_dir(&read_dir_spec.path) {
         Ok(read_dir_spec_iter) => read_dir_spec_iter,
-        Err(err) => return Some(Err(err)),
+        Err(err) => return Err(err),
       };
 
       for each in read_dir_spec_iter {
@@ -250,7 +244,7 @@ mod tests {
           children_spec,
         }));
       }
-      Some(Ok(dir_entry_results))
+      Ok(dir_entry_results)
     })
     .collect();
     assert!(dir_entry_lists.len() == 3);
