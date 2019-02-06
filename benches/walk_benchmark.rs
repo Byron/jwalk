@@ -33,7 +33,6 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
-  c.bench_function("walkdir::WalkDir", move |b| {
   c.bench_function("fts", move |b| {
     b.iter(|| {
       for p in fts::walkdir::WalkDir::new(
@@ -44,10 +43,12 @@ fn walk_benches(c: &mut Criterion) {
     })
   });
 
+  /*
+  c.bench_function("walkdir", move |b| {
     b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
   });
 
-  c.bench_function("walkdir::WalkDir_sorted_metadata", move |b| {
+  c.bench_function("walkdir (sorted, metadata)", move |b| {
     b.iter(|| {
       for each in
         walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name()))
@@ -57,7 +58,7 @@ fn walk_benches(c: &mut Criterion) {
     })
   });
 
-  c.bench_function("ignore::WalkParallel_sorted_metadata", move |b| {
+  c.bench_function("ignore (parallel, sorted, metadata)", move |b| {
     b.iter(|| {
       let (tx, rx) = mpsc::channel();
       WalkBuilder::new(linux_dir())
@@ -79,16 +80,21 @@ fn walk_benches(c: &mut Criterion) {
       metadatas.sort_by(|a, b| a.len().cmp(&b.len()))
     })
   });
+  */
 
-  c.bench_function("jwalk::WalkDir", |b| {
+  c.bench_function("jwalk (parallel)", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()) {})
   });
 
-  c.bench_function("jwalk::WalkDir_preload_metadata", |b| {
+  c.bench_function("jwalk (parallel, 2 threads)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(2) {})
+  });
+
+  c.bench_function("jwalk (parallel, metadata)", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()).preload_metadata(true) {})
   });
 
-  c.bench_function("jwalk::WalkDir_first_1000", |b| {
+  c.bench_function("jwalk (parallel, take first 1000)", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()).into_iter().take(1000) {})
   });
 }

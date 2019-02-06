@@ -6,6 +6,7 @@ mod ordered_queue;
 
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use std::io::Result;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -22,12 +23,19 @@ pub use ordered_queue::OrderedQueueIter;
 ///
 /// - `path` The path to start walking
 /// - `state` State maintained by the client function accross invocations.
+/// - `num_threads` Defaults to using rayon global pool if 0 or 1. Otherwise a
+///   new rayon ThreadPool with `num_threads` is created to perform the walk.
 /// - `f` The client callback function. Given a ReadDirSpec and responsible for
 ///   reading the specified directory. Return None to cancel the walk. Return
 ///   ordered/filtered Vec of DirEntry on successful read. Set
 ///   DirEntry.children_spec on returned DirEntries to recurse the walk into
 ///   those entries.
-pub fn walk<P, S, F, E>(path: P, state: S, f: F) -> OrderedQueueIter<ReadDirResult<S, E>>
+pub fn walk<P, S, F, E>(
+  path: P,
+  state: S,
+  num_threads: usize,
+  f: F,
+) -> OrderedQueueIter<ReadDirResult<S, E>>
 where
   P: Into<PathBuf>,
   S: Send + Clone + 'static,
@@ -39,7 +47,7 @@ where
   let dir_entry_list_queue = new_ordered_queue(stop.clone(), Ordering::Strict);
   let (dir_entry_list_queue, dir_entry_list_iter) = dir_entry_list_queue;
 
-  rayon::spawn(move || {
+  let walk_closure = move || {
     let read_dir_spec = ReadDirSpec { path, state };
     let read_dir_spec_queue = new_ordered_queue(stop.clone(), Ordering::Relaxed);
     let (read_dir_spec_queue, read_dir_spec_iter) = read_dir_spec_queue;
@@ -59,7 +67,18 @@ where
         walk_dir(f, ordered_read_dir_spec, run_context);
       },
     );
-  });
+  };
+
+  // Rayon seems to need at least 2 threads to progress
+  if num_threads > 1 {
+    if let Ok(thread_pool) = ThreadPoolBuilder::new().num_threads(num_threads).build() {
+      thread_pool.spawn(walk_closure);
+    } else {
+      rayon::spawn(walk_closure);
+    }
+  } else {
+    rayon::spawn(walk_closure);
+  }
 
   dir_entry_list_iter
 }
@@ -130,6 +149,15 @@ fn walk_dir<F, S, E>(
   }
 
   run_context.complete_item();
+}
+
+pub trait DirEntryTrait: Send {
+  fn is_skip_children(&self) -> bool;
+  fn skip_children(&mut self, yes: bool);
+}
+
+pub struct WalkOptions {
+  pub num_threads: usize,
 }
 
 /// A specification for a call to the client function to read DirEntries.
@@ -223,7 +251,7 @@ mod tests {
 
   #[test]
   fn test_walk() {
-    let dir_entry_lists: Vec<_> = walk(test_dir(), 0, |read_dir_spec: ReadDirSpec<usize>| {
+    let dir_entry_lists: Vec<_> = walk(test_dir(), 0, 0, |read_dir_spec: ReadDirSpec<usize>| {
       let mut dir_entry_results = Vec::new();
       let read_dir_spec_iter = match fs::read_dir(&read_dir_spec.path) {
         Ok(read_dir_spec_iter) => read_dir_spec_iter,
@@ -247,6 +275,7 @@ mod tests {
       Ok(dir_entry_results)
     })
     .collect();
+
     assert!(dir_entry_lists.len() == 3);
   }
 }
