@@ -2,6 +2,7 @@
 #![allow(unused_imports)]
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use fts;
 use ignore::WalkBuilder;
 use jwalk::WalkDir;
 use num_cpus;
@@ -33,6 +34,16 @@ fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
   c.bench_function("walkdir::WalkDir", move |b| {
+  c.bench_function("fts", move |b| {
+    b.iter(|| {
+      for p in fts::walkdir::WalkDir::new(
+        fts::walkdir::WalkDirConf::new(linux_dir())
+          .no_metadata()
+          .no_chdir(),
+      ) {}
+    })
+  });
+
     b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
   });
 
