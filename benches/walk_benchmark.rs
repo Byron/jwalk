@@ -2,9 +2,8 @@
 #![allow(unused_imports)]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use fts;
 use ignore::WalkBuilder;
-use jwalk::WalkDir;
+use jwalk::{Sort, WalkDir};
 use num_cpus;
 use std::cmp;
 use std::path::PathBuf;
@@ -33,28 +32,71 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
-  c.bench_function("fts", move |b| {
+  c.bench_function("jwalk (unsorted)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(1) {})
+  });
+
+  c.bench_function("jwalk (parallel, unsorted)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()) {})
+  });
+
+  c.bench_function("jwalk (parallel (2), unsorted)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(2) {})
+  });
+
+  c.bench_function("jwalk (parallel, sorted)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).sort(Some(Sort::Name)) {})
+  });
+
+  c.bench_function("jwalk (parallel, sorted, metadata)", |b| {
     b.iter(|| {
-      for p in fts::walkdir::WalkDir::new(
-        fts::walkdir::WalkDirConf::new(linux_dir())
-          .no_metadata()
-          .no_chdir(),
-      ) {}
+      for _ in WalkDir::new(linux_dir())
+        .sort(Some(Sort::Name))
+        .preload_metadata(true)
+      {}
     })
   });
 
-  /*
-  c.bench_function("walkdir", move |b| {
-    b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
+  c.bench_function("jwalk (parallel, sorted, first 100)", |b| {
+    b.iter(|| {
+      for _ in WalkDir::new(linux_dir())
+        .sort(Some(Sort::Name))
+        .into_iter()
+        .take(100)
+      {}
+    })
   });
 
-  c.bench_function("walkdir (sorted, metadata)", move |b| {
+  c.bench_function("ignore (parallel)", move |b| {
     b.iter(|| {
-      for each in
-        walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name()))
-      {
-        let _ = each.unwrap().metadata();
-      }
+      WalkBuilder::new(linux_dir())
+        .hidden(false)
+        .standard_filters(false)
+        .threads(cmp::min(12, num_cpus::get()))
+        .build_parallel()
+        .run(move || Box::new(move |_| ignore::WalkState::Continue));
+    })
+  });
+
+  c.bench_function("ignore (parallel, sorted)", move |b| {
+    b.iter(|| {
+      let (tx, rx) = mpsc::channel();
+      WalkBuilder::new(linux_dir())
+        .hidden(false)
+        .standard_filters(false)
+        .threads(cmp::min(12, num_cpus::get()))
+        .build_parallel()
+        .run(move || {
+          let tx = tx.clone();
+          Box::new(move |dir_entry_result| {
+            if let Ok(dir_entry) = dir_entry_result {
+              tx.send(dir_entry.file_name().to_owned()).unwrap();
+            }
+            ignore::WalkState::Continue
+          })
+        });
+      let mut metadatas: Vec<_> = rx.into_iter().collect();
+      metadatas.sort_by(|a, b| a.len().cmp(&b.len()))
     })
   });
 
@@ -71,7 +113,7 @@ fn walk_benches(c: &mut Criterion) {
           Box::new(move |dir_entry_result| {
             if let Ok(dir_entry) = dir_entry_result {
               let _ = dir_entry.metadata();
-              tx.send(dir_entry.metadata().unwrap()).unwrap();
+              tx.send(dir_entry.file_name().to_owned()).unwrap();
             }
             ignore::WalkState::Continue
           })
@@ -80,22 +122,26 @@ fn walk_benches(c: &mut Criterion) {
       metadatas.sort_by(|a, b| a.len().cmp(&b.len()))
     })
   });
-  */
 
-  c.bench_function("jwalk (parallel)", |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()) {})
+  c.bench_function("walkdir", move |b| {
+    b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
   });
 
-  c.bench_function("jwalk (parallel, 2 threads)", |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(2) {})
+  c.bench_function("walkdir (sorted)", move |b| {
+    b.iter(|| {
+      for _ in walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name())) {
+      }
+    })
   });
 
-  c.bench_function("jwalk (parallel, metadata)", |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()).preload_metadata(true) {})
-  });
-
-  c.bench_function("jwalk (parallel, take first 1000)", |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()).into_iter().take(1000) {})
+  c.bench_function("walkdir (sorted, metadata)", move |b| {
+    b.iter(|| {
+      for each in
+        walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name()))
+      {
+        let _ = each.unwrap().metadata();
+      }
+    })
   });
 }
 

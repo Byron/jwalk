@@ -1,25 +1,20 @@
+use std::iter::Peekable;
 use std::sync::Arc;
 
 use super::*;
 
-/// ReadDirResult Iterator.
-pub enum ReadDirIter<F>
-where
-  F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Clone + 'static,
-{
+/// Result<ReadDir> Iterator.
+pub enum ReadDirIter {
   Walk {
     read_dir_spec_stack: Vec<Ordered<Arc<ReadDirSpec>>>,
-    client_function: F,
+    client_function: Arc<ClientReadDirFunction>,
   },
   ParWalk {
     read_dir_result_iter: OrderedQueueIter<Result<ReadDir>>,
   },
 }
 
-impl<F> Iterator for ReadDirIter<F>
-where
-  F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Clone + 'static,
-{
+impl Iterator for ReadDirIter {
   type Item = Result<ReadDir>;
   fn next(&mut self) -> Option<Self::Item> {
     match self {
@@ -35,7 +30,7 @@ where
         let (read_dir_result, children_specs) = run_client_function(client_function, read_dir_spec);
 
         if let Some(children_specs) = children_specs {
-          for each in children_specs {
+          for each in children_specs.into_iter().rev() {
             read_dir_spec_stack.push(each)
           }
         }
@@ -57,21 +52,17 @@ where
 }
 
 /// Result<DirEntry> Iterator.
-pub struct DirEntryIter<F>
-where
-  F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Clone + 'static,
-{
-  read_dir_iter: ReadDirIter<F>,
+///
+/// Flattens a ReadDirIter into an iterator over individual Result<DirEntry>.
+pub struct DirEntryIter {
+  read_dir_iter: Peekable<ReadDirIter>,
   read_dir_iter_stack: Vec<vec::IntoIter<Result<DirEntry>>>,
 }
 
-impl<F> DirEntryIter<F>
-where
-  F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Clone + 'static,
-{
-  pub fn new(read_dir_iter: ReadDirIter<F>) -> DirEntryIter<F> {
+impl DirEntryIter {
+  pub fn new(read_dir_iter: ReadDirIter) -> DirEntryIter {
     DirEntryIter {
-      read_dir_iter,
+      read_dir_iter: read_dir_iter.peekable(),
       read_dir_iter_stack: Vec::new(),
     }
   }
@@ -87,15 +78,16 @@ where
   }
 }
 
-impl<F> Iterator for DirEntryIter<F>
-where
-  F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Clone + 'static,
-{
+impl Iterator for DirEntryIter {
   type Item = Result<DirEntry>;
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       if self.read_dir_iter_stack.is_empty() {
-        return None;
+        if self.read_dir_iter.peek().is_some() {
+          self.push_next_read_dir_iter();
+        } else {
+          return None;
+        }
       }
 
       let top_read_dir_iter = self.read_dir_iter_stack.last_mut().unwrap();

@@ -15,7 +15,6 @@ criterion = "0.2.7"
 walkdir = "2.2.7"
 ignore = "0.4.6"
 num_cpus = "1.8"
-fts = "0.2.0"
 
 [[bench]]
 name = "walk_benchmark"
