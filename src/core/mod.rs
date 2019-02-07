@@ -32,7 +32,7 @@ where
   F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Sync + Clone + 'static,
 {
   let path = path.into();
-  let read_dir_spec = Arc::new(ReadDirSpec::new(path, None));
+  let read_dir_spec = Arc::new(ReadDirSpec::new(path, 0, None));
   let ordered_read_dir_spec = Ordered::new(read_dir_spec, IndexPath::new(vec![0]), 0);
 
   if num_threads == 1 {
@@ -54,6 +54,8 @@ pub(crate) type ClientReadDirFunction =
 pub struct ReadDirSpec {
   /// The directory to read.
   pub path: PathBuf,
+  /// Depth for the directory to read relative to root of walk.
+  pub depth: usize,
   /// Location where
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
   /// function can store walk state.
@@ -88,8 +90,8 @@ struct RunContext {
 }
 
 impl ReadDirSpec {
-  pub fn new(path: PathBuf, state: Option<Box<Any + Send + Sync>>) -> ReadDirSpec {
-    ReadDirSpec { path, state }
+  pub fn new(path: PathBuf, depth: usize, state: Option<Box<Any + Send + Sync>>) -> ReadDirSpec {
+    ReadDirSpec { path, depth, state }
   }
 }
 
@@ -130,6 +132,7 @@ impl IntoIterator for ReadDir {
 
 impl DirEntry {
   pub fn new(
+    depth: usize,
     file_name: OsString,
     file_type: Result<FileType>,
     metadata: Option<Result<Metadata>>,
@@ -142,7 +145,7 @@ impl DirEntry {
     }
 
     DirEntry {
-      depth: 0,
+      depth,
       file_name,
       file_type,
       parent_spec,

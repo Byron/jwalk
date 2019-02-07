@@ -165,6 +165,7 @@ impl IntoIterator for WalkDir {
     let process_entries = self.options.process_entries.clone();
 
     let dir_entry_iter = core::walk(&self.root, num_threads, move |read_dir_spec| {
+      let depth = read_dir_spec.depth + 1;
       let mut dir_entry_results: Vec<_> = fs::read_dir(&read_dir_spec.path)?
         .filter_map(|dir_entry_result| {
           let dir_entry = match dir_entry_result {
@@ -189,7 +190,7 @@ impl IntoIterator for WalkDir {
             Ok(file_type) => {
               if file_type.is_dir() {
                 let path = read_dir_spec.path.join(dir_entry.file_name());
-                Some(Arc::new(ReadDirSpec::new(path, None)))
+                Some(Arc::new(ReadDirSpec::new(path, depth, None)))
               } else {
                 None
               }
@@ -198,6 +199,7 @@ impl IntoIterator for WalkDir {
           };
 
           Some(Ok(DirEntry::new(
+            depth,
             file_name,
             file_type,
             metadata,
@@ -266,9 +268,12 @@ mod tests {
     walk_dir
       .into_iter()
       .map(|each_result| {
-        let path = each_result.unwrap().path().to_path_buf();
+        let each_entry = each_result.unwrap();
+        let path = each_entry.path().to_path_buf();
         let path = path.strip_prefix(&test_dir).unwrap().to_path_buf();
-        path.to_str().unwrap().to_string()
+        let mut path_string = path.to_str().unwrap().to_string();
+        path_string.push_str(&format!(" ({})", each_entry.depth()));
+        path_string
       })
       .collect()
   }
@@ -276,9 +281,9 @@ mod tests {
   #[test]
   fn test_walk() {
     let paths = local_paths(WalkDir::new(test_dir()));
-    assert!(paths.contains(&"b.txt".to_string()));
-    assert!(paths.contains(&"group 1".to_string()));
-    assert!(paths.contains(&"group 1/d.txt".to_string()));
+    assert!(paths.contains(&"b.txt (1)".to_string()));
+    assert!(paths.contains(&"group 1 (1)".to_string()));
+    assert!(paths.contains(&"group 1/d.txt (2)".to_string()));
   }
 
   #[test]
@@ -291,13 +296,13 @@ mod tests {
     assert!(
       paths
         == vec![
-          "a.txt",
-          "b.txt",
-          "c.txt",
-          "group 1",
-          "group 1/d.txt",
-          "group 2",
-          "group 2/e.txt",
+          "a.txt (1)",
+          "b.txt (1)",
+          "c.txt (1)",
+          "group 1 (1)",
+          "group 1/d.txt (2)",
+          "group 2 (1)",
+          "group 2/e.txt (2)",
         ]
     );
   }
@@ -308,13 +313,13 @@ mod tests {
     assert!(
       paths
         == vec![
-          "a.txt",
-          "b.txt",
-          "c.txt",
-          "group 1",
-          "group 1/d.txt",
-          "group 2",
-          "group 2/e.txt",
+          "a.txt (1)",
+          "b.txt (1)",
+          "c.txt (1)",
+          "group 1 (1)",
+          "group 1/d.txt (2)",
+          "group 2 (1)",
+          "group 2/e.txt (2)",
         ]
     );
   }
@@ -329,13 +334,13 @@ mod tests {
     assert!(
       paths
         == vec![
-          "a.txt",
-          "b.txt",
-          "c.txt",
-          "group 1",
-          "group 1/d.txt",
-          "group 2",
-          "group 2/e.txt",
+          "a.txt (1)",
+          "b.txt (1)",
+          "c.txt (1)",
+          "group 1 (1)",
+          "group 1/d.txt (2)",
+          "group 2 (1)",
+          "group 2/e.txt (2)",
         ]
     );
   }
@@ -347,6 +352,6 @@ mod tests {
         .skip_hidden(false)
         .sort(Some(Sort::Name)),
     );
-    assert!(paths.contains(&"group 2/.hidden_file.txt".to_string()));
+    assert!(paths.contains(&"group 2/.hidden_file.txt (2)".to_string()));
   }
 }
