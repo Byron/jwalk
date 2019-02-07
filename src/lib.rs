@@ -20,7 +20,7 @@
 //!
 //! Recursively iterate over the "foo" directory and print each entry's path:
 //!
-//! ```no_run
+//! COMMETN tHIS OUt```no_run
 //! # use std::io::Error;
 //! use jwalk::WalkDir;
 //!
