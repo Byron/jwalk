@@ -9,7 +9,7 @@ This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir)
 and [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
 parallelism of `ignore` with the streaming iterator based api of `walkdir`.
 
-# Example
+### Example
 
 Recursively iterate over the "foo" directory sorting by name:
 
@@ -23,7 +23,7 @@ fn main() {
 }
 ```
 
-# Why would you use this crate?
+### Why would you use this crate?
 
 Performance is the main reason. The following benchmarks walk linux's source
 code under various conditions. You can run these benchmarks yourself using
@@ -59,7 +59,7 @@ start processing the results in sorted order.
 | walkdir | sorted                         | 200.09 ms |
 | walkdir | sorted, metadata               | 422.74 ms |
 
-# Why wouldn't you use this crate?
+### Why wouldn't you use this crate?
 
 Directory traversal is already pretty fast with existing more popular
 crates. `walkdir` in particular is very good if you need a strait forward
