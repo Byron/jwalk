@@ -55,15 +55,17 @@ impl Iterator for ReadDirIter {
 ///
 /// Flattens a ReadDirIter into an iterator over individual Result<DirEntry>.
 pub struct DirEntryIter {
-  read_dir_iter: Peekable<ReadDirIter>,
   read_dir_iter_stack: Vec<vec::IntoIter<Result<DirEntry>>>,
+  read_dir_iter: Peekable<ReadDirIter>,
+  root_entry_result: Option<Result<DirEntry>>,
 }
 
 impl DirEntryIter {
-  pub fn new(read_dir_iter: ReadDirIter) -> DirEntryIter {
+  pub fn new(read_dir_iter: ReadDirIter, root_entry_result: Result<DirEntry>) -> DirEntryIter {
     DirEntryIter {
       read_dir_iter: read_dir_iter.peekable(),
       read_dir_iter_stack: Vec::new(),
+      root_entry_result: Some(root_entry_result),
     }
   }
 
@@ -81,6 +83,10 @@ impl DirEntryIter {
 impl Iterator for DirEntryIter {
   type Item = Result<DirEntry>;
   fn next(&mut self) -> Option<Self::Item> {
+    if let Some(root_entry_result) = self.root_entry_result.take() {
+      return Some(root_entry_result);
+    }
+
     loop {
       if self.read_dir_iter_stack.is_empty() {
         if self.read_dir_iter.peek().is_some() {
@@ -98,7 +104,7 @@ impl Iterator for DirEntryIter {
           Err(err) => return Some(Err(err)),
         };
 
-        if dir_entry.children_spec().is_some() {
+        if dir_entry.expects_children() {
           dir_entry.set_children_error(self.push_next_read_dir_iter());
         }
 

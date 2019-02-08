@@ -12,8 +12,8 @@ use rayon::ThreadPoolBuilder;
 use std::any::Any;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, FileType, Metadata};
-use std::io::{Error, Result};
-use std::path::PathBuf;
+use std::io::{Error, ErrorKind, Result};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::vec;
@@ -32,25 +32,39 @@ where
   F: Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Sync + Clone + 'static,
 {
   let path = path.into();
-  let read_dir_spec = Arc::new(ReadDirSpec::new(path, 0, None));
-  let ordered_read_dir_spec = Ordered::new(read_dir_spec, IndexPath::new(vec![0]), 0);
+  let root_entry_result = DirEntry::try_from(&path);
+  let ordered_read_dir_spec = root_entry_result.as_ref().ok().and_then(|root_entry| {
+    if let Ok(file_type) = root_entry.file_type() {
+      if file_type.is_dir() {
+        let read_dir_spec = Arc::new(ReadDirSpec::new(path, 0, None));
+        return Some(Ordered::new(read_dir_spec, IndexPath::new(vec![0]), 0));
+      }
+    }
+    None
+  });
 
   if num_threads == 1 {
-    single_threaded_walk(ordered_read_dir_spec, Arc::new(client_function))
+    single_threaded_walk(
+      ordered_read_dir_spec,
+      Arc::new(client_function),
+      root_entry_result,
+    )
   } else {
     multi_threaded_walk(
       num_threads,
       ordered_read_dir_spec,
       Arc::new(client_function),
+      root_entry_result,
     )
   }
 }
 
-/// Clients read dir function.
+/// Client's read dir function.
 pub(crate) type ClientReadDirFunction =
   Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Sync + 'static;
 
 /// Specification use to read a directory.
+#[derive(Debug)]
 pub struct ReadDirSpec {
   /// The directory to read.
   pub path: PathBuf,
@@ -60,24 +74,25 @@ pub struct ReadDirSpec {
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
   /// function can store walk state.
   ///
-  /// One intended use case is to store `.gitignore` state to filter entries
-  /// during the walk... in theory, haven't actually implemented anything using
-  /// this field yet.
+  /// This is a placeholder right now. One intended use case is to store
+  /// `.gitignore` state to filter entries during the walk.
   pub state: Option<Box<Any + Send + Sync>>,
 }
 
 /// Results of reading a directory returned by `client_function`.
+#[derive(Debug)]
 pub struct ReadDir {
   dir_entry_results: Vec<Result<DirEntry>>,
 }
 
 /// Representation of a file or directory on filesystem.
+#[derive(Debug)]
 pub struct DirEntry {
   depth: usize,
   file_name: OsString,
   file_type: Result<FileType>,
   metadata: LazyCell<Result<Metadata>>,
-  parent_spec: Arc<ReadDirSpec>,
+  parent_spec: Option<Arc<ReadDirSpec>>,
   children_spec: Option<Arc<ReadDirSpec>>,
   children_error: Option<Error>,
 }
@@ -110,7 +125,7 @@ impl ReadDir {
       .iter()
       .filter_map(|dir_entry_result| {
         if let Ok(dir_entry) = dir_entry_result {
-          dir_entry.children_spec().clone()
+          dir_entry.children_spec.clone()
         } else {
           None
         }
@@ -131,19 +146,18 @@ impl IntoIterator for ReadDir {
 }
 
 impl DirEntry {
-  pub fn new(
+  pub(crate) fn new(
     depth: usize,
     file_name: OsString,
     file_type: Result<FileType>,
     metadata: Option<Result<Metadata>>,
-    parent_spec: Arc<ReadDirSpec>,
+    parent_spec: Option<Arc<ReadDirSpec>>,
     children_spec: Option<Arc<ReadDirSpec>>,
   ) -> DirEntry {
     let metadata_cell = LazyCell::new();
     if let Some(metadata) = metadata {
       metadata_cell.fill(metadata).unwrap();
     }
-
     DirEntry {
       depth,
       file_name,
@@ -153,6 +167,25 @@ impl DirEntry {
       children_spec: children_spec,
       children_error: None,
     }
+  }
+
+  // Should use std::convert::TryFrom when stable
+  fn try_from(path: &Path) -> Result<DirEntry> {
+    let metadata = fs::metadata(path)?;
+    let root_name = OsString::from("/");
+    let file_name = path.file_name().unwrap_or(&root_name);
+    let parent_spec = path
+      .parent()
+      .map(|parent| Arc::new(ReadDirSpec::new(parent.to_path_buf(), 0, None)));
+
+    Ok(DirEntry::new(
+      0,
+      file_name.to_owned(),
+      Ok(metadata.file_type()),
+      Some(Ok(metadata)),
+      parent_spec,
+      None,
+    ))
   }
 
   /// Depth of this entry relative to the root directory where the walk started.
@@ -168,16 +201,19 @@ impl DirEntry {
   /// File type for the file that this entry points at.
   ///
   /// This function will not traverse symlinks.
-  pub fn file_type(&self) -> &Result<FileType> {
-    &self.file_type
+  pub fn file_type(&self) -> ::std::result::Result<&FileType, &Error> {
+    self.file_type.as_ref()
   }
 
-  /// Full path to the file that this entry represents.
+  /// Path to the file that this entry represents.
   ///
-  /// The full path is created by joining the `parent_spec` path with the
-  /// filename of this entry.
+  /// The path is created by joining the `parent_spec` path with the filename of
+  /// this entry.
   pub fn path(&self) -> PathBuf {
-    let mut path = self.parent_spec.path.to_path_buf();
+    let mut path = match &self.parent_spec {
+      Some(parent_spec) => parent_spec.path.to_path_buf(),
+      None => PathBuf::from(""),
+    };
     path.push(&self.file_name);
     path
   }
@@ -185,37 +221,29 @@ impl DirEntry {
   /// Metadata for the file that this entry points at.
   ///
   /// This function will not traverse symlinks.
-  pub fn metadata(&self) -> &Result<Metadata> {
+  pub fn metadata(&self) -> ::std::result::Result<&Metadata, &Error> {
     if !self.metadata.filled() {
       self.metadata.fill(fs::metadata(self.path())).unwrap();
     }
-    self.metadata.borrow().unwrap()
+    self.metadata.borrow().unwrap().as_ref()
   }
 
-  /// [`ReadDirSpec`](struct.ReadDirSpec.html) used to read this entry.
-  pub fn parent_spec(&self) -> &Arc<ReadDirSpec> {
-    &self.parent_spec
-  }
-
-  /// [`ReadDirSpec`](struct.ReadDirSpec.html) used to read this entry's
-  /// children.
-  pub fn children_spec(&self) -> &Option<Arc<ReadDirSpec>> {
-    &self.children_spec
+  pub(crate) fn expects_children(&self) -> bool {
+    self.children_spec.is_some()
   }
 
   /// Set [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
-  /// children. By default this is automatically set for any entry that is a
-  /// directory. The
+  /// children. This is set by default for any directory entry. The
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
-  /// function call `entry.set_children_spec(None)` to skip descending into that
-  /// directory.
-  pub fn set_children_spec(&mut self, children_spec: Option<Arc<ReadDirSpec>>) {
-    self.children_spec = children_spec;
+  /// may call `entry.set_children_spec(None)` to skip descending into a
+  /// particular directory.
+  pub fn set_children_spec(&mut self, children_spec: Option<ReadDirSpec>) {
+    self.children_spec = children_spec.map(|read_dir_spec| Arc::new(read_dir_spec));
   }
 
   /// Error generated when reading this entry's children.
-  pub fn children_error(&self) -> &Option<Error> {
-    &self.children_error
+  pub fn children_error(&self) -> Option<&Error> {
+    self.children_error.as_ref()
   }
 
   pub(crate) fn set_children_error(&mut self, children_error: Option<Error>) {
@@ -253,25 +281,40 @@ impl Clone for RunContext {
 }
 
 fn single_threaded_walk(
-  ordered_read_dir_spec: Ordered<Arc<ReadDirSpec>>,
+  ordered_read_dir_spec: Option<Ordered<Arc<ReadDirSpec>>>,
   client_function: Arc<ClientReadDirFunction>,
+  root_entry_result: Result<DirEntry>,
 ) -> DirEntryIter {
-  DirEntryIter::new(ReadDirIter::Walk {
-    read_dir_spec_stack: vec![ordered_read_dir_spec],
-    client_function,
-  })
+  let read_dir_spec_stack = match ordered_read_dir_spec {
+    Some(ordered_read_dir_spec) => vec![ordered_read_dir_spec],
+    None => Vec::new(),
+  };
+
+  DirEntryIter::new(
+    ReadDirIter::Walk {
+      read_dir_spec_stack,
+      client_function,
+    },
+    root_entry_result,
+  )
 }
 
 fn multi_threaded_walk(
   num_threads: usize,
-  ordered_read_dir_spec: Ordered<Arc<ReadDirSpec>>,
+  ordered_read_dir_spec: Option<Ordered<Arc<ReadDirSpec>>>,
   client_function: Arc<ClientReadDirFunction>,
+  root_entry_result: Result<DirEntry>,
 ) -> DirEntryIter {
   let stop = Arc::new(AtomicBool::new(false));
   let read_dir_result_queue = new_ordered_queue(stop.clone(), Ordering::Strict);
   let (read_dir_result_queue, read_dir_result_iter) = read_dir_result_queue;
 
   let walk_closure = move || {
+    let ordered_read_dir_spec = match ordered_read_dir_spec {
+      Some(ordered_read_dir_spec) => ordered_read_dir_spec,
+      None => return,
+    };
+
     let read_dir_spec_queue = new_ordered_queue(stop.clone(), Ordering::Relaxed);
     let (read_dir_spec_queue, read_dir_spec_iter) = read_dir_spec_queue;
 
@@ -302,9 +345,12 @@ fn multi_threaded_walk(
     rayon::spawn(walk_closure);
   }
 
-  DirEntryIter::new(ReadDirIter::ParWalk {
-    read_dir_result_iter,
-  })
+  DirEntryIter::new(
+    ReadDirIter::ParWalk {
+      read_dir_result_iter,
+    },
+    root_entry_result,
+  )
 }
 
 fn multi_threaded_walk_dir(read_dir_spec: Ordered<Arc<ReadDirSpec>>, run_context: &mut RunContext) {
