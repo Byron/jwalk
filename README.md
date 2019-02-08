@@ -13,16 +13,14 @@ parallelism of `ignore` with the streaming iterator based api of `walkdir`.
 
 Recursively iterate over the "foo" directory sorting by name:
 
-```no_run
-# use std::io::Error;
+```
 use jwalk::{Sort, WalkDir};
 
-# fn try_main() -> Result<(), Error> {
-for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
-  println!("{}", entry?.path().display());
+fn main() {
+  for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
+    println!("{}", entry?.path().display());
+  }
 }
-# Ok(())
-# }
 ```
 
 # Why would you use this crate?
