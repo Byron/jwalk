@@ -6,9 +6,7 @@ Fast recursive directory walk.
 - Results are streamed in sorted order
 - Custom sort/filter/skip if needed
 
-This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir)
-and [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
-parallelism of `ignore` with `walkdir`s streaming iterator API.
+[![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)
 
 ### Usage
 
@@ -30,6 +28,12 @@ for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
   println!("{}", entry?.path().display());
 }
 ```
+
+### Inspiration
+
+This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir) and
+[`ignore`](https://crates.io/crates/ignore). It attempts to combine the
+parallelism of `ignore` with `walkdir`s streaming iterator API.
 
 ### Why use this crate?
 
