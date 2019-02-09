@@ -1,20 +1,31 @@
 jwalk
 =======
+
+**Note** This is my first public crate. Looking testing and feedback (Code, API,
+Documentation) before posting 1.0.
+
 Fast recursive directory walk.
 
 - Walk is performed in parallel using rayon
 - Results are streamed in sorted order
-- Custom sort/filter/skip if needed
+- Custom sort/filter/skip
 
 [![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)
+[![Latest version](https://img.shields.io/crates/v/jwalk.svg)](https://crates.io/crates/jwalk)
+[![Documentation](https://docs.rs/jwalk/badge.svg)](https://docs.rs/jwalk)
+[![License](https://img.shields.io/crates/l/jwalk.svg)](https://github.com/rust-lang-nursery/jwalk.rs#license)
+
+### Documentation
+
+[docs.rs/jwalk](https://docs.rs/jwalk)
 
 ### Usage
 
-To use this crate add `jwalk` to your project's `Cargo.toml`:
+Add `jwalk` to your project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-jwalk = {  git = "https://github.com/jessegrosjean/jwalk" }
+jwalk = "0.1.0"
 ```
 
 ### Example
@@ -56,7 +67,7 @@ implementation.
 
 ### Benchmarks
 
-Time to walk linux's source code:
+Time to walk linux's source tree:
 
 | Crate   | Options                        | Time      |
 |---------|--------------------------------|-----------|
