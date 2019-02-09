@@ -13,6 +13,10 @@ pub struct ReadDir {
 }
 
 /// Specification use to read a directory.
+///
+/// When a directory is read a new `ReadDirSpec` is created for each folder
+/// found in that directory. These specs are then sent to a work queue that is
+/// used to schedule future directory reads.
 #[derive(Debug)]
 pub struct ReadDirSpec {
   /// The directory to read.
