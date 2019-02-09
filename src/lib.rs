@@ -1,6 +1,6 @@
 //! Fast recursive directory walk.
 //!
-//! - Walk is performed in parallel using rayon
+//! - Performed in parallel using rayon
 //! - Results are streamed in sorted order
 //! - Custom sort/filter/skip
 //!

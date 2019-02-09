@@ -8,6 +8,11 @@ use std::sync::Arc;
 use super::ReadDirSpec;
 
 /// Representation of a file or directory.
+///
+/// This representation does not wrap a `std::fs::DirEntry`. Instead it copies
+/// `file_name`, `file_type`, and optionaly `metadata` out of the underlying
+/// `std::fs::DirEntry` so that it can drop the underlying file descriptor as
+/// soon as possible.
 #[derive(Debug)]
 pub struct DirEntry {
   depth: usize,

@@ -3,13 +3,12 @@ jwalk
 
 Fast recursive directory walk.
 
-- Walk is performed in parallel using rayon
+- Performed in parallel using rayon
 - Results are streamed in sorted order
 - Custom sort/filter/skip
 
 [![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)
-[![Latest version](https://img.shields.io/crates/v/jwalk.svg)](https://crates.io/crates/jwalk)
-[![Documentation](https://docs.rs/jwalk/badge.svg)](https://docs.rs/jwalk)
+[![Latest version](http://meritbadge.herokuapp.com/jwalk)](https://crates.io/crates/jwalk)
 [![License](https://img.shields.io/crates/l/jwalk.svg)](https://github.com/rust-lang-nursery/jwalk.rs#license)
 
 ### Usage
@@ -21,7 +20,7 @@ Add this to your `Cargo.toml`:
 jwalk = "0.1.0"
 ```
 
-Documentation: [docs.rs/jwalk](https://docs.rs/jwalk).
+Lean More: [docs.rs/jwalk](https://docs.rs/jwalk)
 
 ### Example
 
@@ -39,7 +38,7 @@ for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
 
 This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir) and
 [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
-parallelism of `ignore` with `walkdir`s streaming iterator API.
+parallelism of `ignore` with `walkdir`'s streaming iterator API.
 
 ### Why use this crate?
 
