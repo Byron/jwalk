@@ -40,7 +40,8 @@
 //! # Why not use this crate?
 //!
 //! Directory traversal is already pretty fast. If you don't need this crate's
-//! speed then `walkdir` provides a smaller single threaded implementation.
+//! speed then `walkdir` provides a smaller and more tested single threaded
+//! implementation.
 //!
 //! # Benchmarks
 //!

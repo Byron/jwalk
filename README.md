@@ -10,19 +10,25 @@ This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir)
 and [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
 parallelism of `ignore` with `walkdir`s streaming iterator API.
 
+### Usage
+
+To use this crate add `jwalk` to your project's `Cargo.toml`:
+
+```toml
+[dependencies]
+jwalk = {  git = "https://github.com/jessegrosjean/jwalk" }
+```
+
 ### Example
 
 Recursively iterate over the "foo" directory sorting by name:
 
-```no_run
-# use std::io::Error;
+```rust
 use jwalk::{Sort, WalkDir};
-# fn try_main() -> Result<(), Error> {
+
 for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
   println!("{}", entry?.path().display());
 }
-# Ok(())
-# }
 ```
 
 ### Why use this crate?
@@ -40,8 +46,9 @@ It can be much faster then post processing the yielded entries.
 
 ### Why not use this crate?
 
-Directory traversal is already pretty fast. If you don't need this crate's
-speed then `walkdir` provides a smaller single threaded implementation.
+Directory traversal is already pretty fast. If you don't need this crate's speed
+then `walkdir` provides a smaller and more tested single threaded
+implementation.
 
 ### Benchmarks
 
