@@ -23,10 +23,10 @@ impl Iterator for ReadDirIter {
         client_function,
       } => {
         let read_dir_spec = read_dir_spec_stack.pop()?;
-        let (read_dir_result, children_specs) = run_client_function(client_function, read_dir_spec);
+        let (read_dir_result, content_specs) = run_client_function(client_function, read_dir_spec);
 
-        if let Some(children_specs) = children_specs {
-          for each in children_specs.into_iter().rev() {
+        if let Some(content_specs) = content_specs {
+          for each in content_specs.into_iter().rev() {
             read_dir_spec_stack.push(each)
           }
         }
@@ -43,9 +43,9 @@ impl Iterator for ReadDirIter {
   }
 }
 
-/// Result<DirEntry> Iterator.
+/// Iterator yielding directory entries.
 ///
-/// Flattens a ReadDirIter into an iterator over individual Result<DirEntry>.
+/// Flattens a `ReadDirIter` into an iterator over individual `Result<DirEntry>`.
 pub struct DirEntryIter {
   read_dir_iter_stack: Vec<vec::IntoIter<Result<DirEntry>>>,
   read_dir_iter: Peekable<ReadDirIter>,
@@ -96,8 +96,8 @@ impl Iterator for DirEntryIter {
           Err(err) => return Some(Err(err)),
         };
 
-        if dir_entry.expects_children() {
-          dir_entry.set_read_children_error(self.push_next_read_dir_iter());
+        if dir_entry.expects_content() {
+          dir_entry.set_read_content_error(self.push_next_read_dir_iter());
         }
 
         return Some(Ok(dir_entry));

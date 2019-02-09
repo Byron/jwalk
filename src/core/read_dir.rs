@@ -40,14 +40,14 @@ impl ReadDir {
     &self.dir_entry_results
   }
 
-  pub(crate) fn ordered_children_specs(
+  pub(crate) fn ordered_content_specs(
     &self,
     index_path: &IndexPath,
   ) -> Vec<Ordered<Arc<ReadDirSpec>>> {
     self
       .dir_entry_results()
       .iter()
-      .filter_map(|each| each.as_ref().ok()?.children_spec.clone())
+      .filter_map(|each| each.as_ref().ok()?.content_spec.clone())
       .enumerate()
       .map(|(i, spec)| Ordered::new(spec, index_path.adding(i), 0))
       .collect()

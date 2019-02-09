@@ -20,8 +20,8 @@ pub struct DirEntry {
   file_type: Result<FileType>,
   metadata: LazyCell<Result<Metadata>>,
   parent_spec: Option<Arc<ReadDirSpec>>,
-  pub(crate) children_spec: Option<Arc<ReadDirSpec>>,
-  read_children_error: Option<Error>,
+  pub(crate) content_spec: Option<Arc<ReadDirSpec>>,
+  read_content_error: Option<Error>,
 }
 
 impl DirEntry {
@@ -31,7 +31,7 @@ impl DirEntry {
     file_type: Result<FileType>,
     metadata: Option<Result<Metadata>>,
     parent_spec: Option<Arc<ReadDirSpec>>,
-    children_spec: Option<Arc<ReadDirSpec>>,
+    content_spec: Option<Arc<ReadDirSpec>>,
   ) -> DirEntry {
     let metadata_cell = LazyCell::new();
     if let Some(metadata) = metadata {
@@ -43,8 +43,8 @@ impl DirEntry {
       file_type,
       parent_spec,
       metadata: metadata_cell,
-      children_spec: children_spec,
-      read_children_error: None,
+      content_spec: content_spec,
+      read_content_error: None,
     }
   }
 
@@ -67,11 +67,6 @@ impl DirEntry {
     ))
   }
 
-  /// Depth of this entry relative to the root directory where the walk started.
-  pub fn depth(&self) -> usize {
-    self.depth
-  }
-
   /// File name of this entry without leading path component.
   pub fn file_name(&self) -> &OsStr {
     &self.file_name
@@ -82,6 +77,11 @@ impl DirEntry {
   /// This function will not traverse symlinks.
   pub fn file_type(&self) -> ::std::result::Result<&FileType, &Error> {
     self.file_type.as_ref()
+  }
+
+  /// Depth of this entry relative to the root directory where the walk started.
+  pub fn depth(&self) -> usize {
+    self.depth
   }
 
   /// Path to the file that this entry represents.
@@ -107,25 +107,25 @@ impl DirEntry {
     self.metadata.borrow().unwrap().as_ref()
   }
 
-  pub(crate) fn expects_children(&self) -> bool {
-    self.children_spec.is_some()
+  pub(crate) fn expects_content(&self) -> bool {
+    self.content_spec.is_some()
   }
 
   /// Set [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
-  /// children. This is set by default for any directory entry. The
+  /// content. This is set by default for any directory entry. The
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
-  /// may call `entry.set_children_spec(None)` to skip descending into a
+  /// may call `entry.set_content_spec(None)` to skip descending into a
   /// particular directory.
-  pub fn set_children_spec(&mut self, children_spec: Option<ReadDirSpec>) {
-    self.children_spec = children_spec.map(|read_dir_spec| Arc::new(read_dir_spec));
+  pub fn set_content_spec(&mut self, content_spec: Option<ReadDirSpec>) {
+    self.content_spec = content_spec.map(|read_dir_spec| Arc::new(read_dir_spec));
   }
 
-  /// Error generated when reading this entry's children.
-  pub fn read_children_error(&self) -> Option<&Error> {
-    self.read_children_error.as_ref()
+  /// Error generated when reading this entry's content.
+  pub fn read_content_error(&self) -> Option<&Error> {
+    self.read_content_error.as_ref()
   }
 
-  pub(crate) fn set_read_children_error(&mut self, read_children_error: Option<Error>) {
-    self.read_children_error = read_children_error;
+  pub(crate) fn set_read_content_error(&mut self, read_content_error: Option<Error>) {
+    self.read_content_error = read_content_error;
   }
 }

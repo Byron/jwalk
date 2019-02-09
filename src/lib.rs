@@ -10,10 +10,10 @@
 //!
 //! ```no_run
 //! # use std::io::Error;
-//! use jwalk::{Sort, WalkDir};
+//! use jwalk::{WalkDir};
 //!
 //! # fn try_main() -> Result<(), Error> {
-//! for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
+//! for entry in WalkDir::new("foo").sort(true) {
 //!   println!("{}", entry?.path().display());
 //! }
 //! # Ok(())
@@ -29,9 +29,9 @@ use std::io::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::core::{DirEntryIter, ReadDir};
+use crate::core::ReadDir;
 
-pub use crate::core::{DirEntry, ReadDirSpec};
+pub use crate::core::{DirEntry, DirEntryIter, ReadDirSpec};
 
 /// Builder for walking a directory.
 pub struct WalkDir {
@@ -39,20 +39,8 @@ pub struct WalkDir {
   options: WalkDirOptions,
 }
 
-/// Directory sort options.
-///
-/// If you need more flexibility use
-/// [`process_entries`](struct.WalkDir.html#method.process_entries).
-#[derive(Clone)]
-pub enum Sort {
-  Name,
-  Access,
-  Creation,
-  Modification,
-}
-
 struct WalkDirOptions {
-  sort: Option<Sort>,
+  sort: bool,
   max_depth: usize,
   skip_hidden: bool,
   num_threads: usize,
@@ -69,7 +57,7 @@ impl WalkDir {
     WalkDir {
       root: root.as_ref().to_path_buf(),
       options: WalkDirOptions {
-        sort: None,
+        sort: false,
         max_depth: ::std::usize::MAX,
         num_threads: 0,
         skip_hidden: true,
@@ -96,10 +84,10 @@ impl WalkDir {
     self
   }
 
-  /// Sort entries per directory. Use
+  /// Sort entries by file_name per directory. Defaults to false. Use
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) for custom
   /// sorting or filtering.
-  pub fn sort(mut self, sort: Option<Sort>) -> Self {
+  pub fn sort(mut self, sort: bool) -> Self {
     self.options.sort = sort;
     self
   }
@@ -127,7 +115,7 @@ impl WalkDir {
 
   /// Set a function to process (sort/filter/skip) each directory of entries
   /// before they are yeilded. Use
-  /// [`entry.set_children_spec(None)`](struct.DirEntry.html#method.children_spec)
+  /// [`entry.set_content_spec(None)`](struct.DirEntry.html#method.content_spec)
   /// to yeild that directory but skip descending into its contents.
   pub fn process_entries<F>(mut self, process_by: F) -> Self
   where
@@ -171,7 +159,7 @@ impl IntoIterator for WalkDir {
             None
           };
 
-          let children_spec = match file_type {
+          let content_spec = match file_type {
             Ok(file_type) => {
               if file_type.is_dir() && depth < max_depth {
                 let path = read_dir_spec.path.join(dir_entry.file_name());
@@ -189,14 +177,19 @@ impl IntoIterator for WalkDir {
             file_type,
             metadata,
             Some(read_dir_spec.clone()),
-            children_spec,
+            content_spec,
           )))
         })
         .collect();
 
-      sort
-        .as_ref()
-        .map(|sort| sort.perform_sort(&mut dir_entry_results));
+      if sort {
+        dir_entry_results.sort_by(|a, b| match (a, b) {
+          (Ok(a), Ok(b)) => a.file_name().cmp(b.file_name()),
+          (Ok(_), Err(_)) => Ordering::Less,
+          (Err(_), Ok(_)) => Ordering::Greater,
+          (Err(_), Err(_)) => Ordering::Equal,
+        });
+      }
 
       process_entries.as_ref().map(|process_entries| {
         process_entries(&mut dir_entry_results);
@@ -209,21 +202,10 @@ impl IntoIterator for WalkDir {
   }
 }
 
-impl Sort {
-  fn perform_sort(&self, dir_entry_results: &mut Vec<Result<DirEntry>>) {
-    dir_entry_results.sort_by(|a, b| match (a, b) {
-      (Ok(a), Ok(b)) => a.file_name().cmp(b.file_name()),
-      (Ok(_), Err(_)) => Ordering::Less,
-      (Err(_), Ok(_)) => Ordering::Greater,
-      (Err(_), Err(_)) => Ordering::Equal,
-    });
-  }
-}
-
 impl Clone for WalkDirOptions {
   fn clone(&self) -> WalkDirOptions {
     WalkDirOptions {
-      sort: None,
+      sort: false,
       max_depth: self.max_depth,
       num_threads: self.num_threads,
       skip_hidden: self.skip_hidden,

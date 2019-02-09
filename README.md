@@ -9,7 +9,6 @@ Fast recursive directory walk.
 
 [![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)
 [![Latest version](http://meritbadge.herokuapp.com/jwalk)](https://crates.io/crates/jwalk)
-[![License](https://img.shields.io/crates/l/jwalk.svg)](https://github.com/rust-lang-nursery/jwalk.rs#license)
 
 ### Usage
 
@@ -27,9 +26,9 @@ Lean More: [docs.rs/jwalk](https://docs.rs/jwalk)
 Recursively iterate over the "foo" directory sorting by name:
 
 ```rust
-use jwalk::{Sort, WalkDir};
+use jwalk::{WalkDir};
 
-for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
+for entry in WalkDir::new("foo").sort(true) {
   println!("{}", entry?.path().display());
 }
 ```

@@ -1,6 +1,6 @@
 [package]
 name = "jwalk"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Jesse Grosjean <jesse@hogbaysoftware.com>"]
 description = "Recursively walk a directory."
 homepage = "https://github.com/jessegrosjean/jwalk"

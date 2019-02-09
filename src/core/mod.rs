@@ -167,7 +167,7 @@ fn multi_threaded_walk(
 }
 
 fn multi_threaded_walk_dir(read_dir_spec: Ordered<Arc<ReadDirSpec>>, run_context: &mut RunContext) {
-  let (read_dir_result, children_specs) =
+  let (read_dir_result, content_specs) =
     run_client_function(&run_context.client_function, read_dir_spec);
 
   if !run_context.push_read_dir_result(read_dir_result) {
@@ -175,8 +175,8 @@ fn multi_threaded_walk_dir(read_dir_spec: Ordered<Arc<ReadDirSpec>>, run_context
     return;
   }
 
-  if let Some(children_specs) = children_specs {
-    for each in children_specs {
+  if let Some(content_specs) = content_specs {
+    for each in content_specs {
       if !run_context.schedule_read_dir_spec(each) {
         run_context.stop();
         return;
@@ -202,18 +202,18 @@ pub(crate) fn run_client_function(
 
   let read_dir_result = client_function(read_dir_spec);
 
-  let ordered_children_specs = read_dir_result
+  let ordered_content_specs = read_dir_result
     .as_ref()
     .ok()
-    .map(|read_dir| read_dir.ordered_children_specs(&index_path));
+    .map(|read_dir| read_dir.ordered_content_specs(&index_path));
 
   let ordered_read_dir_result = Ordered::new(
     read_dir_result,
     index_path,
-    ordered_children_specs
+    ordered_content_specs
       .as_ref()
       .map_or(0, |specs| specs.len()),
   );
 
-  (ordered_read_dir_result, ordered_children_specs)
+  (ordered_read_dir_result, ordered_content_specs)
 }

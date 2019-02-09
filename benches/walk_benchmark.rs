@@ -3,7 +3,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
-use jwalk::{Sort, WalkDir};
+use jwalk::WalkDir;
 use num_cpus;
 use std::cmp;
 use std::path::PathBuf;
@@ -32,42 +32,39 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
   checkout_linux_if_needed();
 
-  c.bench_function("jwalk (unsorted)", |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(1) {})
-  });
-
-  c.bench_function("jwalk (parallel, unsorted)", |b| {
+  c.bench_function("jwalk (unsorted, parallel)", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()) {})
   });
 
-  c.bench_function("jwalk (parallel (2), unsorted)", |b| {
+  c.bench_function("jwalk (sorted, parallel)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).sort(true) {})
+  });
+
+  c.bench_function("jwalk (sorted, parallel, metadata)", |b| {
+    b.iter(
+      || {
+        for _ in WalkDir::new(linux_dir()).sort(true).preload_metadata(true) {}
+      },
+    )
+  });
+
+  c.bench_function("jwalk (sorted, parallel, first 100)", |b| {
+    b.iter(
+      || {
+        for _ in WalkDir::new(linux_dir()).sort(true).into_iter().take(100) {}
+      },
+    )
+  });
+
+  c.bench_function("jwalk (unsorted, parallel (2 threads))", |b| {
     b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(2) {})
   });
 
-  c.bench_function("jwalk (parallel, sorted)", |b| {
-    b.iter(|| for _ in WalkDir::new(linux_dir()).sort(Some(Sort::Name)) {})
+  c.bench_function("jwalk (unsorted, serial)", |b| {
+    b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(1) {})
   });
 
-  c.bench_function("jwalk (parallel, sorted, metadata)", |b| {
-    b.iter(|| {
-      for _ in WalkDir::new(linux_dir())
-        .sort(Some(Sort::Name))
-        .preload_metadata(true)
-      {}
-    })
-  });
-
-  c.bench_function("jwalk (parallel, sorted, first 100)", |b| {
-    b.iter(|| {
-      for _ in WalkDir::new(linux_dir())
-        .sort(Some(Sort::Name))
-        .into_iter()
-        .take(100)
-      {}
-    })
-  });
-
-  c.bench_function("ignore (parallel)", move |b| {
+  c.bench_function("ignore (unsorted, parallel)", move |b| {
     b.iter(|| {
       WalkBuilder::new(linux_dir())
         .hidden(false)
@@ -78,7 +75,7 @@ fn walk_benches(c: &mut Criterion) {
     })
   });
 
-  c.bench_function("ignore (parallel, sorted)", move |b| {
+  c.bench_function("ignore (sorted, parallel)", move |b| {
     b.iter(|| {
       let (tx, rx) = mpsc::channel();
       WalkBuilder::new(linux_dir())
@@ -123,7 +120,7 @@ fn walk_benches(c: &mut Criterion) {
     })
   });
 
-  c.bench_function("walkdir", move |b| {
+  c.bench_function("walkdir (unsorted)", move |b| {
     b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
   });
 

@@ -1,4 +1,3 @@
-
 use jwalk::*;
 use std::path::PathBuf;
 
@@ -31,11 +30,7 @@ fn walk() {
 
 #[test]
 fn sort_by_name_single_thread() {
-  let paths = local_paths(
-    WalkDir::new(test_dir())
-      .num_threads(1)
-      .sort(Some(Sort::Name)),
-  );
+  let paths = local_paths(WalkDir::new(test_dir()).num_threads(1).sort(true));
   assert!(
     paths
       == vec![
@@ -53,7 +48,7 @@ fn sort_by_name_single_thread() {
 
 #[test]
 fn sort_by_name_rayon_pool_global() {
-  let paths = local_paths(WalkDir::new(test_dir()).sort(Some(Sort::Name)));
+  let paths = local_paths(WalkDir::new(test_dir()).sort(true));
   assert!(
     paths
       == vec![
@@ -71,11 +66,7 @@ fn sort_by_name_rayon_pool_global() {
 
 #[test]
 fn sort_by_name_rayon_pool_2_threads() {
-  let paths = local_paths(
-    WalkDir::new(test_dir())
-      .num_threads(2)
-      .sort(Some(Sort::Name)),
-  );
+  let paths = local_paths(WalkDir::new(test_dir()).num_threads(2).sort(true));
   assert!(
     paths
       == vec![
@@ -93,17 +84,13 @@ fn sort_by_name_rayon_pool_2_threads() {
 
 #[test]
 fn see_hidden_files() {
-  let paths = local_paths(
-    WalkDir::new(test_dir())
-      .skip_hidden(false)
-      .sort(Some(Sort::Name)),
-  );
+  let paths = local_paths(WalkDir::new(test_dir()).skip_hidden(false).sort(true));
   assert!(paths.contains(&"group 2/.hidden_file.txt (2)".to_string()));
 }
 
 #[test]
 fn max_depth() {
-  let paths = local_paths(WalkDir::new(test_dir()).max_depth(1).sort(Some(Sort::Name)));
+  let paths = local_paths(WalkDir::new(test_dir()).max_depth(1).sort(true));
   assert!(
     paths
       == vec![
