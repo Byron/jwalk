@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 jwalk = "0.1.0"
 ```
 
-See documentation next: [docs.rs/jwalk](https://docs.rs/jwalk).
+Documentation: [docs.rs/jwalk](https://docs.rs/jwalk).
 
 ### Example
 
@@ -43,10 +43,10 @@ parallelism of `ignore` with `walkdir`s streaming iterator API.
 
 ### Why use this crate?
 
-This crate is particularly fast when you want streamed sorted results. About 4x
-`walkdir` speed for sorted results with metadata in my tests. Also this crate's
-`process_entries` callback allows you to arbitrarily sort/filter/skip entries
-before they are yielded.
+This crate is particularly fast when you want streamed sorted results. In my
+tests its about 4x `walkdir` speed for sorted results with metadata. Also this
+crate's `process_entries` callback allows you to arbitrarily sort/filter/skip
+entries before they are yielded.
 
 ### Why not use this crate?
 
