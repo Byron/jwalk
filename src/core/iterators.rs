@@ -22,11 +22,7 @@ impl Iterator for ReadDirIter {
         read_dir_spec_stack,
         client_function,
       } => {
-        let read_dir_spec = match read_dir_spec_stack.pop() {
-          Some(read_dir_spec) => read_dir_spec,
-          None => return None,
-        };
-
+        let read_dir_spec = read_dir_spec_stack.pop()?;
         let (read_dir_result, children_specs) = run_client_function(client_function, read_dir_spec);
 
         if let Some(children_specs) = children_specs {
@@ -40,13 +36,9 @@ impl Iterator for ReadDirIter {
 
       ReadDirIter::ParWalk {
         read_dir_result_iter,
-      } => {
-        if let Some(ordered_read_dir_result) = read_dir_result_iter.next() {
-          Some(ordered_read_dir_result.value)
-        } else {
-          None
-        }
-      }
+      } => read_dir_result_iter
+        .next()
+        .and_then(|read_dir_result| Some(read_dir_result.value)),
     }
   }
 }
@@ -105,7 +97,7 @@ impl Iterator for DirEntryIter {
         };
 
         if dir_entry.expects_children() {
-          dir_entry.set_children_error(self.push_next_read_dir_iter());
+          dir_entry.set_read_children_error(self.push_next_read_dir_iter());
         }
 
         return Some(Ok(dir_entry));

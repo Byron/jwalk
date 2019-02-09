@@ -1,3 +1,5 @@
+//! Ordered queue backed by a channel.
+
 use crossbeam::channel::{self, Receiver, SendError, Sender, TryRecvError};
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
@@ -153,12 +155,9 @@ where
       }
     }
 
-    if let Some(ordered) = self.receive_buffer.pop() {
-      self.ordered_matcher.advance_past(&ordered);
-      Some(ordered)
-    } else {
-      None
-    }
+    let ordered = self.receive_buffer.pop()?;
+    self.ordered_matcher.advance_past(&ordered);
+    Some(ordered)
   }
 }
 

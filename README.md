@@ -4,7 +4,7 @@ Fast recursive directory walk.
 
 - Walk is performed in parallel using rayon
 - Results are streamed in sorted order
-- Custom sorting/filtering if needed
+- Custom sort/filter/skip if needed
 
 This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir)
 and [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
@@ -14,20 +14,38 @@ parallelism of `ignore` with `walkdir`s streaming iterator API.
 
 Recursively iterate over the "foo" directory sorting by name:
 
-```rust
+```no_run
+# use std::io::Error;
 use jwalk::{Sort, WalkDir};
-
-fn main() {
-  for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
-    println!("{}", entry?.path().display());
-  }
+# fn try_main() -> Result<(), Error> {
+for entry in WalkDir::new("foo").sort(Some(Sort::Name)) {
+  println!("{}", entry?.path().display());
 }
+# Ok(())
+# }
 ```
 
-### Why would you use this crate?
+### Why use this crate?
 
-Speed is the main reason. The following benchmarks walk linux's source code
-under various conditions. Run these benchmarks yourself using `cargo bench`.
+Speed and flexibility.
+
+This crate is particularly fast when you want streamed sorted results. In
+this case it's much faster then `walkdir` and has much better latency then
+`ignore`.
+
+This crate's `process_entries` callback allows you to arbitrarily
+sort/filter/skip each directories entries before they are yielded. This
+processing happens in the thread pool and effects the directory traversal.
+It can be much faster then post processing the yielded entries.
+
+### Why not use this crate?
+
+Directory traversal is already pretty fast. If you don't need this crate's
+speed then `walkdir` provides a smaller single threaded implementation.
+
+### Benchmarks
+
+Time to walk linux's source code:
 
 | Crate   | Options                        | Time      |
 |---------|--------------------------------|-----------|
@@ -43,30 +61,3 @@ under various conditions. Run these benchmarks yourself using `cargo bench`.
 | walkdir | unsorted                       | 162.09 ms |
 | walkdir | sorted                         | 200.09 ms |
 | walkdir | sorted, metadata               | 422.74 ms |
-
-Note in particular that this crate is fast when you want streamed sorted
-results. Also note that even when used in single thread mode this crate is
-very close to `walkdir` in performance.
-
-This crate's parallelism happens at `fs::read_dir` granularity. If you are
-walking many files in a single directory it won't help. On the other hand if
-you are walking a hierarchy with multiple folders then it can help a lot.
-
-Also note that even though the `ignore` crate has similar performance to
-this crate is has much worse latency when you want sorted results. This
-crate will start streaming sorted results right away, while with `ignore`
-you'll need to wait until the entire walk finishes before you can sort and
-start processing the results in sorted order.
-
-### Why wouldn't you use this crate?
-
-Directory traversal is already pretty fast with existing crates. `walkdir` in
-particular is great if you need a strait forward single threaded solution.
-
-This crate processes each `fs::read_dir` as a single unit. Reading all
-entries and converting them into its own `DirEntry` representation. This
-representation is fairly lightweight, but if you have an extremely wide or
-deep directory structure it might cause problems holding too many
-`DirEntry`s in memory at once. The concern here is memory, not open file
-descriptors. This crate only keeps one open file descriptor per rayon
-thread.

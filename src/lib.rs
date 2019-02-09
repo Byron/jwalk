@@ -2,7 +2,7 @@
 //!
 //! - Walk is performed in parallel using rayon
 //! - Results are streamed in sorted order
-//! - Custom sorting/filtering if needed
+//! - Custom sort/filter/skip if needed
 //!
 //! This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir)
 //! and [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
@@ -24,10 +24,27 @@
 //! # }
 //! ```
 //!
-//! # Why would you use this crate?
+//! # Why use this crate?
 //!
-//! Speed is the main reason. The following benchmarks walk linux's source code
-//! under various conditions. Run these benchmarks yourself using `cargo bench`.
+//! Speed and flexibility.
+//!
+//! This crate is particularly fast when you want streamed sorted results. In
+//! this case it's much faster then `walkdir` and has much better latency then
+//! `ignore`.
+//!
+//! This crate's `process_entries` callback allows you to arbitrarily
+//! sort/filter/skip each directories entries before they are yielded. This
+//! processing happens in the thread pool and effects the directory traversal.
+//! It can be much faster then post processing the yielded entries.
+//!
+//! # Why not use this crate?
+//!
+//! Directory traversal is already pretty fast. If you don't need this crate's
+//! speed then `walkdir` provides a smaller single threaded implementation.
+//!
+//! # Benchmarks
+//!
+//! Time to walk linux's source code:
 //!
 //! | Crate   | Options                        | Time      |
 //! |---------|--------------------------------|-----------|
@@ -43,33 +60,6 @@
 //! | walkdir | unsorted                       | 162.09 ms |
 //! | walkdir | sorted                         | 200.09 ms |
 //! | walkdir | sorted, metadata               | 422.74 ms |
-//!
-//! Note in particular that this crate is fast when you want streamed sorted
-//! results. Also note that even when used in single thread mode this crate is
-//! very close to `walkdir` in performance.
-//!
-//! This crate's parallelism happens at `fs::read_dir` granularity. If you are
-//! walking many files in a single directory it won't help. On the other hand if
-//! you are walking a hierarchy with multiple folders then it can help a lot.
-//!
-//! Also note that even though the `ignore` crate has similar performance to
-//! this crate is has much worse latency when you want sorted results. This
-//! crate will start streaming sorted results right away, while with `ignore`
-//! you'll need to wait until the entire walk finishes before you can sort and
-//! start processing the results in sorted order.
-//!
-//! # Why wouldn't you use this crate?
-//!
-//! Directory traversal is already pretty fast with existing crates. `walkdir` in
-//! particular is great if you need a single threaded solution.
-//!
-//! This crate processes each `fs::read_dir` as a single unit. Reading all
-//! entries and converting them into its own `DirEntry` representation. This
-//! representation is fairly lightweight, but if you have an extremely wide or
-//! deep directory structure it might cause problems holding too many
-//! `DirEntry`s in memory at once. The concern here is memory, not open file
-//! descriptors. This crate only keeps one open file descriptor per rayon
-//! thread.
 
 mod core;
 
@@ -84,13 +74,15 @@ use crate::core::{DirEntryIter, ReadDir};
 
 pub use crate::core::{DirEntry, ReadDirSpec};
 
-/// Builder to create an iterator for walking a directory.
+/// Builder for walking a directory.
 pub struct WalkDir {
   root: PathBuf,
   options: WalkDirOptions,
 }
 
-/// Per directory sort options. If you need more flexibility use
+/// Directory sort options.
+///
+/// If you need more flexibility use
 /// [`process_entries`](struct.WalkDir.html#method.process_entries).
 #[derive(Clone)]
 pub enum Sort {
@@ -153,8 +145,6 @@ impl WalkDir {
     self
   }
 
-  /// Number of threads to use:
-  ///
   /// - `0` Use rayon global pool.
   /// - `1` Perform walk on calling thread.
   /// - `n > 1` Construct a new rayon ThreadPool to perform the walk.
@@ -163,26 +153,23 @@ impl WalkDir {
     self
   }
 
-  /// Skip hidden entries as determined by leading `.` in file name.
-  /// Enabled by default.
+  /// Skip hidden entries. Enabled by default.
   pub fn skip_hidden(mut self, skip_hidden: bool) -> Self {
     self.options.skip_hidden = skip_hidden;
     self
   }
 
-  /// Preload metadata before returning entries. This can improve performance if
-  /// you need to access the metadata of each yielded entry. The metadata
-  /// loading is done ahead of time in rayon's thread pool.
+  /// Preload metadata before yeilding entries. When running in parrallel the
+  /// metadata is loaded in rayon's thread pool.
   pub fn preload_metadata(mut self, preload_metadata: bool) -> Self {
     self.options.preload_metadata = preload_metadata;
     self
   }
 
-  /// Set a function to process entries before they are yeilded through the walk
-  /// iterator. This function can filter/sort the given list of entries. It can also make
-  /// the walk skip descending into particular directories by calling
+  /// Set a function to process (sort/filter/skip) each directory of entries
+  /// before they are yeilded. Use
   /// [`entry.set_children_spec(None)`](struct.DirEntry.html#method.children_spec)
-  /// on them.
+  /// to yeild that directory but skip descending into its contents.
   pub fn process_entries<F>(mut self, process_by: F) -> Self
   where
     F: Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static,
@@ -219,7 +206,6 @@ impl IntoIterator for WalkDir {
           }
 
           let file_type = dir_entry.file_type();
-
           let metadata = if preload_metadata {
             Some(dir_entry.metadata())
           } else {
@@ -293,141 +279,4 @@ fn is_hidden(file_name: &OsStr) -> bool {
     .to_str()
     .map(|s| s.starts_with("."))
     .unwrap_or(false)
-}
-
-#[cfg(test)]
-mod tests {
-
-  use super::*;
-  use walkdir;
-
-  fn test_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/test_dir")
-  }
-
-  fn local_paths(walk_dir: WalkDir) -> Vec<String> {
-    let test_dir = test_dir();
-    walk_dir
-      .into_iter()
-      .map(|each_result| {
-        let each_entry = each_result.unwrap();
-        let path = each_entry.path().to_path_buf();
-        let path = path.strip_prefix(&test_dir).unwrap().to_path_buf();
-        let mut path_string = path.to_str().unwrap().to_string();
-        path_string.push_str(&format!(" ({})", each_entry.depth()));
-        path_string
-      })
-      .collect()
-  }
-
-  #[test]
-  fn test_walk() {
-    let paths = local_paths(WalkDir::new(test_dir()));
-    assert!(paths.contains(&"b.txt (1)".to_string()));
-    assert!(paths.contains(&"group 1 (1)".to_string()));
-    assert!(paths.contains(&"group 1/d.txt (2)".to_string()));
-  }
-
-  #[test]
-  fn test_sort_by_name_single_thread() {
-    let paths = local_paths(
-      WalkDir::new(test_dir())
-        .num_threads(1)
-        .sort(Some(Sort::Name)),
-    );
-    assert!(
-      paths
-        == vec![
-          " (0)",
-          "a.txt (1)",
-          "b.txt (1)",
-          "c.txt (1)",
-          "group 1 (1)",
-          "group 1/d.txt (2)",
-          "group 2 (1)",
-          "group 2/e.txt (2)",
-        ]
-    );
-  }
-
-  #[test]
-  fn test_sort_by_name_rayon_pool_global() {
-    let paths = local_paths(WalkDir::new(test_dir()).sort(Some(Sort::Name)));
-    assert!(
-      paths
-        == vec![
-          " (0)",
-          "a.txt (1)",
-          "b.txt (1)",
-          "c.txt (1)",
-          "group 1 (1)",
-          "group 1/d.txt (2)",
-          "group 2 (1)",
-          "group 2/e.txt (2)",
-        ]
-    );
-  }
-
-  #[test]
-  fn test_sort_by_name_rayon_pool_2_threads() {
-    let paths = local_paths(
-      WalkDir::new(test_dir())
-        .num_threads(2)
-        .sort(Some(Sort::Name)),
-    );
-    assert!(
-      paths
-        == vec![
-          " (0)",
-          "a.txt (1)",
-          "b.txt (1)",
-          "c.txt (1)",
-          "group 1 (1)",
-          "group 1/d.txt (2)",
-          "group 2 (1)",
-          "group 2/e.txt (2)",
-        ]
-    );
-  }
-
-  #[test]
-  fn test_see_hidden_files() {
-    let paths = local_paths(
-      WalkDir::new(test_dir())
-        .skip_hidden(false)
-        .sort(Some(Sort::Name)),
-    );
-    assert!(paths.contains(&"group 2/.hidden_file.txt (2)".to_string()));
-  }
-
-  #[test]
-  fn test_max_depth() {
-    let paths = local_paths(WalkDir::new(test_dir()).max_depth(1).sort(Some(Sort::Name)));
-    assert!(
-      paths
-        == vec![
-          " (0)",
-          "a.txt (1)",
-          "b.txt (1)",
-          "c.txt (1)",
-          "group 1 (1)",
-          "group 2 (1)",
-        ]
-    );
-  }
-
-  #[test]
-  fn test_walk_file() {
-    let walk_dir = WalkDir::new(test_dir().join("a.txt"));
-    let mut iter = walk_dir.into_iter();
-    assert!(iter.next().unwrap().unwrap().file_name().to_str().unwrap() == "a.txt");
-    assert!(iter.next().is_none());
-  }
-
-  #[test]
-  fn test_walk_root() {
-    let mut iter = walkdir::WalkDir::new("/").max_depth(1).into_iter();
-    assert!(iter.next().unwrap().unwrap().file_name() == "/");
-  }
-
 }

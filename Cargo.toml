@@ -2,6 +2,13 @@
 name = "jwalk"
 version = "0.1.0"
 authors = ["Jesse Grosjean <jesse@hogbaysoftware.com>"]
+description = "Recursively walk a directory."
+homepage = "https://github.com/jessegrosjean/jwalk"
+repository = "https://github.com/jessegrosjean/jwalk"
+readme = "README.md"
+keywords = ["directory", "recursive", "walk", "iterator"]
+categories = ["filesystem"]
+license = "MIT"
 edition = "2018"
 
 [dependencies]
