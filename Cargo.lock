@@ -264,7 +264,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "jwalk"
-version = "0.2.1-alpha.0"
+version = "0.2.1"
 dependencies = [
  "criterion 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
