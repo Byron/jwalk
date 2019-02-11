@@ -116,12 +116,10 @@ where
 
       if let Some(ordered_work) = self.receive_buffer.pop() {
         return Some(ordered_work);
+      } else if self.pending_count() == 0 {
+        return None;
       } else {
-        if self.pending_count() == 0 {
-          return None;
-        } else {
-          thread::yield_now();
-        }
+        thread::yield_now();
       }
     }
   }

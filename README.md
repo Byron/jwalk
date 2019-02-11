@@ -1,10 +1,10 @@
 jwalk
 =======
 
-Fast recursive directory walk.
+Filesystem walk.
 
 - Performed in parallel using rayon
-- Results are streamed in sorted order
+- Entries streamed in sorted order 
 - Custom sort/filter/skip
 
 [![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)

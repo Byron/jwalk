@@ -43,7 +43,7 @@ impl DirEntry {
       file_type,
       parent_spec,
       metadata: metadata_cell,
-      content_spec: content_spec,
+      content_spec,
       read_content_error: None,
     }
   }
@@ -72,7 +72,7 @@ impl DirEntry {
     &self.file_name
   }
 
-  /// File type for the file that this entry points at.
+  /// File type for the file/directory that this entry points at.
   ///
   /// This function will not traverse symlinks.
   pub fn file_type(&self) -> ::std::result::Result<&FileType, &Error> {
@@ -84,10 +84,17 @@ impl DirEntry {
     self.depth
   }
 
-  /// Path to the file that this entry represents.
+  /// Reference to the path of the directory containing this entry.
+  pub fn parent_path(&self) -> Option<&Path> {
+    self
+      .parent_spec
+      .as_ref()
+      .map(|parent_spec| parent_spec.path.as_ref())
+  }
+
+  /// Path to the file/directory represented by this entry.
   ///
-  /// The path is created by joining the `parent_spec` path with the filename of
-  /// this entry.
+  /// The path is created by joining `parent_path` with `file_name`.
   pub fn path(&self) -> PathBuf {
     let mut path = match self.parent_spec.as_ref() {
       Some(parent_spec) => parent_spec.path.to_path_buf(),
@@ -97,7 +104,7 @@ impl DirEntry {
     path
   }
 
-  /// Metadata for the file that this entry points at.
+  /// Metadata for the file/directory that this entry points at.
   ///
   /// This function will not traverse symlinks.
   pub fn metadata(&self) -> ::std::result::Result<&Metadata, &Error> {
@@ -117,7 +124,7 @@ impl DirEntry {
   /// may call `entry.set_content_spec(None)` to skip descending into a
   /// particular directory.
   pub fn set_content_spec(&mut self, content_spec: Option<ReadDirSpec>) {
-    self.content_spec = content_spec.map(|read_dir_spec| Arc::new(read_dir_spec));
+    self.content_spec = content_spec.map(Arc::new);
   }
 
   /// Error generated when reading this entry's content.
@@ -127,5 +134,16 @@ impl DirEntry {
 
   pub(crate) fn set_read_content_error(&mut self, read_content_error: Option<Error>) {
     self.read_content_error = read_content_error;
+  }
+
+  /// Consumes the entry returning the `depth`, `file_name`, `file_type`, and
+  /// `metadata` parts.
+  pub fn into_parts(self) -> (usize, OsString, Result<FileType>, Option<Result<Metadata>>) {
+    (
+      self.depth,
+      self.file_name,
+      self.file_type,
+      self.metadata.into_inner(),
+    )
   }
 }

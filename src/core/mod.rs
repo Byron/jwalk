@@ -74,11 +74,11 @@ impl RunContext {
   }
 
   fn schedule_read_dir_spec(&self, read_dir_spec: Ordered<Arc<ReadDirSpec>>) -> bool {
-    !self.read_dir_spec_queue.push(read_dir_spec).is_err()
+    self.read_dir_spec_queue.push(read_dir_spec).is_ok()
   }
 
   fn push_read_dir_result(&self, read_dir_result: Ordered<Result<ReadDir>>) -> bool {
-    !self.read_dir_result_queue.push(read_dir_result).is_err()
+    self.read_dir_result_queue.push(read_dir_result).is_ok()
   }
 
   fn complete_item(&self) {
@@ -137,10 +137,10 @@ fn multi_threaded_walk(
       stop,
       read_dir_spec_queue,
       read_dir_result_queue,
-      client_function: client_function,
+      client_function,
     };
 
-    read_dir_spec_iter.into_iter().par_bridge().for_each_with(
+    read_dir_spec_iter.par_bridge().for_each_with(
       run_context,
       |run_context, ordered_read_dir_spec| {
         multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
@@ -187,17 +187,19 @@ fn multi_threaded_walk_dir(read_dir_spec: Ordered<Arc<ReadDirSpec>>, run_context
   run_context.complete_item();
 }
 
+pub(crate) type ClientFunctionResults = (
+  Ordered<Result<ReadDir>>,
+  Option<Vec<Ordered<Arc<ReadDirSpec>>>>,
+);
+
 pub(crate) fn run_client_function(
   client_function: &Arc<ClientReadDirFunction>,
   ordered_read_dir_spec: Ordered<Arc<ReadDirSpec>>,
-) -> (
-  Ordered<Result<ReadDir>>,
-  Option<Vec<Ordered<Arc<ReadDirSpec>>>>,
-) {
+) -> ClientFunctionResults {
   let Ordered {
     value: read_dir_spec,
     index_path,
-    child_count: _,
+    ..
   } = ordered_read_dir_spec;
 
   let read_dir_result = client_function(read_dir_spec);

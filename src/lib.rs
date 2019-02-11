@@ -1,7 +1,9 @@
-//! Fast recursive directory walk.
+#![warn(clippy::all)]
+
+//! Filesystem walk.
 //!
 //! - Performed in parallel using rayon
-//! - Results are streamed in sorted order
+//! - Entries streamed in sorted order
 //! - Custom sort/filter/skip
 //!
 //! # Example
@@ -39,13 +41,15 @@ pub struct WalkDir {
   options: WalkDirOptions,
 }
 
+pub type ProcessEntriesFunction = Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static;
+
 struct WalkDirOptions {
   sort: bool,
   max_depth: usize,
   skip_hidden: bool,
   num_threads: usize,
   preload_metadata: bool,
-  process_entries: Option<Arc<Fn(&mut Vec<Result<DirEntry>>) + Send + Sync>>,
+  process_entries: Option<Arc<ProcessEntriesFunction>>,
 }
 
 impl WalkDir {
@@ -138,7 +142,7 @@ impl IntoIterator for WalkDir {
     let preload_metadata = self.options.preload_metadata;
     let process_entries = self.options.process_entries.clone();
 
-    let dir_entry_iter = core::walk(&self.root, num_threads, move |read_dir_spec| {
+    core::walk(&self.root, num_threads, move |read_dir_spec| {
       let depth = read_dir_spec.depth + 1;
       let mut dir_entry_results: Vec<_> = fs::read_dir(&read_dir_spec.path)?
         .filter_map(|dir_entry_result| {
@@ -191,14 +195,12 @@ impl IntoIterator for WalkDir {
         });
       }
 
-      process_entries.as_ref().map(|process_entries| {
+      if let Some(process_entries) = process_entries.as_ref() {
         process_entries(&mut dir_entry_results);
-      });
+      }
 
       Ok(ReadDir::new(dir_entry_results))
-    });
-
-    dir_entry_iter
+    })
   }
 }
 
@@ -218,6 +220,6 @@ impl Clone for WalkDirOptions {
 fn is_hidden(file_name: &OsStr) -> bool {
   file_name
     .to_str()
-    .map(|s| s.starts_with("."))
+    .map(|s| s.starts_with('.'))
     .unwrap_or(false)
 }
