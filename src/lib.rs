@@ -95,9 +95,9 @@ impl WalkDir {
   /// Maximum depth of entries yielded by the iterator. `0` corresponds to the
   /// root path of this walk.
   ///
-  /// A depth < 2 will automatically change `thread_count` to 1. `jwalks`
-  /// parrallelism happens at the `fs::read_dir` level. It only makes sense to
-  /// use multiple threads when reading more then one directory.
+  /// A depth < 2 will automatically change `thread_count` to 1. Parrallelism
+  /// happens at the `fs::read_dir` level. It only makes sense to use multiple
+  /// threads when reading more then one directory.
   pub fn max_depth(mut self, depth: usize) -> Self {
     self.options.max_depth = depth;
     if depth == 1 {
@@ -115,9 +115,10 @@ impl WalkDir {
   }
 
   /// A callback function to process (sort/filter/skip) each directory of
-  /// entries before they are yeilded. From within this callback use
-  /// [`entry.set_content_spec(None)`](struct.DirEntry.html#method.content_spec)
-  /// to yeild that directory but skip descending into its contents.
+  /// entries before they are yeilded. Modify the given array to sort/filter
+  /// entries. Use [`entry.content_spec =
+  /// None`](struct.DirEntry.html#field.content_spec) to yeild an entry but skip
+  /// reading its contents.
   pub fn process_entries<F>(mut self, process_by: F) -> Self
   where
     F: Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static,

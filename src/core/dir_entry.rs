@@ -10,8 +10,8 @@ use super::ReadDirSpec;
 ///
 /// This representation does not wrap a `std::fs::DirEntry`. Instead it copies
 /// `file_name`, `file_type`, and optionaly `metadata` out of the underlying
-/// `std::fs::DirEntry` so that it can drop the underlying file descriptor as
-/// soon as possible.
+/// `std::fs::DirEntry`. This allows it to quickly drop the underlying file
+/// descriptor.
 #[derive(Debug)]
 pub struct DirEntry {
   /// Depth of this entry relative to the root directory where the walk started.
@@ -21,16 +21,18 @@ pub struct DirEntry {
   /// File type result for the file/directory that this entry points at.
   pub file_type: Result<FileType>,
   /// Metadata result for the file/directory that this entry points at. Defaults
-  /// to `None`. Set when
-  /// [`preload_metadata`](struct.WalkDir.html#method.preload_metadata) is set.
+  /// to `None`. Filled in by the walk process when the
+  /// [`preload_metadata`](struct.WalkDir.html#method.preload_metadata) option
+  /// is set.
   pub metadata: Option<Result<Metadata>>,
   /// [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
   /// content. This is automatically set for directory entries. The
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
-  /// may set to `None` to skip descending into a particular directory.
+  /// may set this field to `None` to skip reading the contents of this
+  /// particular directory.
   pub content_spec: Option<Arc<ReadDirSpec>>,
-  /// `fs::read_dir` error generated after trying to read this entry's content
-  /// using the spec in `content_spec`.
+  /// If `fs::read_dir` generates an error when reading this entry's content
+  /// then that error is stored here.
   pub content_error: Option<Error>,
   /// [`ReadDirSpec`](struct.ReadDirSpec.html) used by this entry's parent to
   /// read this entry.

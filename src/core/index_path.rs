@@ -28,10 +28,6 @@ impl IndexPath {
     self.indices.pop()
   }
 
-  pub fn len(&self) -> usize {
-    self.indices.len()
-  }
-
   pub fn is_empty(&self) -> bool {
     self.indices.is_empty()
   }

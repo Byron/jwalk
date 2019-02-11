@@ -51,7 +51,10 @@ pub struct DirEntryIter {
 }
 
 impl DirEntryIter {
-  pub fn new(read_dir_iter: ReadDirIter, root_entry_result: Result<DirEntry>) -> DirEntryIter {
+  pub(crate) fn new(
+    read_dir_iter: ReadDirIter,
+    root_entry_result: Result<DirEntry>,
+  ) -> DirEntryIter {
     DirEntryIter {
       read_dir_iter: read_dir_iter.peekable(),
       read_dir_iter_stack: Vec::new(),
