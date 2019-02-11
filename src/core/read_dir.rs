@@ -63,7 +63,15 @@ impl IntoIterator for ReadDir {
 }
 
 impl ReadDirSpec {
-  pub fn new(path: PathBuf, depth: usize, state: Option<Box<Any + Send + Sync>>) -> ReadDirSpec {
-    ReadDirSpec { path, depth, state }
+  pub fn new<P: Into<PathBuf>>(
+    path: P,
+    depth: usize,
+    state: Option<Box<Any + Send + Sync>>,
+  ) -> ReadDirSpec {
+    ReadDirSpec {
+      path: path.into(),
+      depth,
+      state,
+    }
   }
 }

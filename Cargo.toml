@@ -14,7 +14,6 @@ edition = "2018"
 [dependencies]
 rayon = "1.0.3"
 crossbeam = "0.7.1"
-lazycell = "1.2"
 
 [dev-dependencies]
 criterion = "0.2.7"

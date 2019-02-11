@@ -1,5 +1,4 @@
-use lazycell::LazyCell;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs::{self, FileType, Metadata};
 use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
@@ -15,13 +14,27 @@ use super::ReadDirSpec;
 /// soon as possible.
 #[derive(Debug)]
 pub struct DirEntry {
-  depth: usize,
-  file_name: OsString,
-  file_type: Result<FileType>,
-  metadata: LazyCell<Result<Metadata>>,
-  parent_spec: Option<Arc<ReadDirSpec>>,
-  pub(crate) content_spec: Option<Arc<ReadDirSpec>>,
-  read_content_error: Option<Error>,
+  /// Depth of this entry relative to the root directory where the walk started.
+  pub depth: usize,
+  /// File name of this entry without leading path component.
+  pub file_name: OsString,
+  /// File type result for the file/directory that this entry points at.
+  pub file_type: Result<FileType>,
+  /// Metadata result for the file/directory that this entry points at. Defaults
+  /// to `None`. Set when
+  /// [`preload_metadata`](struct.WalkDir.html#method.preload_metadata) is set.
+  pub metadata: Option<Result<Metadata>>,
+  /// [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
+  /// content. This is automatically set for directory entries. The
+  /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
+  /// may set to `None` to skip descending into a particular directory.
+  pub content_spec: Option<Arc<ReadDirSpec>>,
+  /// `fs::read_dir` error generated after trying to read this entry's content
+  /// using the spec in `content_spec`.
+  pub content_error: Option<Error>,
+  /// [`ReadDirSpec`](struct.ReadDirSpec.html) used by this entry's parent to
+  /// read this entry.
+  pub parent_spec: Option<Arc<ReadDirSpec>>,
 }
 
 impl DirEntry {
@@ -33,19 +46,35 @@ impl DirEntry {
     parent_spec: Option<Arc<ReadDirSpec>>,
     content_spec: Option<Arc<ReadDirSpec>>,
   ) -> DirEntry {
-    let metadata_cell = LazyCell::new();
-    if let Some(metadata) = metadata {
-      metadata_cell.fill(metadata).unwrap();
-    }
     DirEntry {
       depth,
       file_name,
       file_type,
       parent_spec,
-      metadata: metadata_cell,
+      metadata,
       content_spec,
-      read_content_error: None,
+      content_error: None,
     }
+  }
+
+  /// Path to the file/directory represented by this entry.
+  ///
+  /// The path is created by joining `parent_path` with `file_name`.
+  pub fn path(&self) -> PathBuf {
+    let mut path = match self.parent_spec.as_ref() {
+      Some(parent_spec) => parent_spec.path.to_path_buf(),
+      None => PathBuf::from(""),
+    };
+    path.push(&self.file_name);
+    path
+  }
+
+  /// Reference to the path of the directory containing this entry.
+  pub fn parent_path(&self) -> Option<&Path> {
+    self
+      .parent_spec
+      .as_ref()
+      .map(|parent_spec| parent_spec.path.as_ref())
   }
 
   // Should use std::convert::TryFrom when stable
@@ -65,85 +94,5 @@ impl DirEntry {
       parent_spec,
       None,
     ))
-  }
-
-  /// File name of this entry without leading path component.
-  pub fn file_name(&self) -> &OsStr {
-    &self.file_name
-  }
-
-  /// File type for the file/directory that this entry points at.
-  ///
-  /// This function will not traverse symlinks.
-  pub fn file_type(&self) -> ::std::result::Result<&FileType, &Error> {
-    self.file_type.as_ref()
-  }
-
-  /// Depth of this entry relative to the root directory where the walk started.
-  pub fn depth(&self) -> usize {
-    self.depth
-  }
-
-  /// Reference to the path of the directory containing this entry.
-  pub fn parent_path(&self) -> Option<&Path> {
-    self
-      .parent_spec
-      .as_ref()
-      .map(|parent_spec| parent_spec.path.as_ref())
-  }
-
-  /// Path to the file/directory represented by this entry.
-  ///
-  /// The path is created by joining `parent_path` with `file_name`.
-  pub fn path(&self) -> PathBuf {
-    let mut path = match self.parent_spec.as_ref() {
-      Some(parent_spec) => parent_spec.path.to_path_buf(),
-      None => PathBuf::from(""),
-    };
-    path.push(&self.file_name);
-    path
-  }
-
-  /// Metadata for the file/directory that this entry points at.
-  ///
-  /// This function will not traverse symlinks.
-  pub fn metadata(&self) -> ::std::result::Result<&Metadata, &Error> {
-    if !self.metadata.filled() {
-      self.metadata.fill(fs::metadata(self.path())).unwrap();
-    }
-    self.metadata.borrow().unwrap().as_ref()
-  }
-
-  pub(crate) fn expects_content(&self) -> bool {
-    self.content_spec.is_some()
-  }
-
-  /// Set [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
-  /// content. This is set by default for any directory entry. The
-  /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
-  /// may call `entry.set_content_spec(None)` to skip descending into a
-  /// particular directory.
-  pub fn set_content_spec(&mut self, content_spec: Option<ReadDirSpec>) {
-    self.content_spec = content_spec.map(Arc::new);
-  }
-
-  /// Error generated when reading this entry's content.
-  pub fn read_content_error(&self) -> Option<&Error> {
-    self.read_content_error.as_ref()
-  }
-
-  pub(crate) fn set_read_content_error(&mut self, read_content_error: Option<Error>) {
-    self.read_content_error = read_content_error;
-  }
-
-  /// Consumes the entry returning the `depth`, `file_name`, `file_type`, and
-  /// `metadata` parts.
-  pub fn into_parts(self) -> (usize, OsString, Result<FileType>, Option<Result<Metadata>>) {
-    (
-      self.depth,
-      self.file_name,
-      self.file_type,
-      self.metadata.into_inner(),
-    )
   }
 }

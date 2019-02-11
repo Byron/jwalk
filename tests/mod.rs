@@ -14,7 +14,7 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
       let path = each_entry.path().to_path_buf();
       let path = path.strip_prefix(&test_dir).unwrap().to_path_buf();
       let mut path_string = path.to_str().unwrap().to_string();
-      path_string.push_str(&format!(" ({})", each_entry.depth()));
+      path_string.push_str(&format!(" ({})", each_entry.depth));
       path_string
     })
     .collect()
@@ -108,7 +108,7 @@ fn max_depth() {
 fn walk_file() {
   let walk_dir = WalkDir::new(test_dir().join("a.txt"));
   let mut iter = walk_dir.into_iter();
-  assert!(iter.next().unwrap().unwrap().file_name().to_str().unwrap() == "a.txt");
+  assert!(iter.next().unwrap().unwrap().file_name.to_str().unwrap() == "a.txt");
   assert!(iter.next().is_none());
 }
 

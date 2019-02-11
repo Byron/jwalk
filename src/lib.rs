@@ -41,7 +41,7 @@ pub struct WalkDir {
   options: WalkDirOptions,
 }
 
-pub type ProcessEntriesFunction = Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static;
+type ProcessEntriesFunction = Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static;
 
 struct WalkDirOptions {
   sort: bool,
@@ -71,36 +71,11 @@ impl WalkDir {
     }
   }
 
-  /// Set the maximum depth of entries yield by the iterator.
-  ///
-  /// The smallest depth is `0` and always corresponds to the path given to the
-  /// `new` function on this type. Its direct descendents have depth `1`, and
-  /// their descendents have depth `2`, and so on.
-  ///
-  /// Note that a depth < 2 will automatically change `thread_count` to 1.
-  /// `jwalks` parrallelism happens at the `fs::read_dir` level, so it only
-  /// makes sense to use multiple threads when reading more then one directory.
-  pub fn max_depth(mut self, depth: usize) -> Self {
-    self.options.max_depth = depth;
-    if depth == 1 {
-      self.options.num_threads = 1;
-    }
-    self
-  }
-
-  /// Sort entries by file_name per directory. Defaults to false. Use
+  /// Sort entries by `file_name` per directory. Defaults to `false`. Use
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) for custom
   /// sorting or filtering.
   pub fn sort(mut self, sort: bool) -> Self {
     self.options.sort = sort;
-    self
-  }
-
-  /// - `0` Use rayon global pool.
-  /// - `1` Perform walk on calling thread.
-  /// - `n > 1` Construct a new rayon ThreadPool to perform the walk.
-  pub fn num_threads(mut self, n: usize) -> Self {
-    self.options.num_threads = n;
     self
   }
 
@@ -117,8 +92,30 @@ impl WalkDir {
     self
   }
 
-  /// Set a function to process (sort/filter/skip) each directory of entries
-  /// before they are yeilded. Use
+  /// Maximum depth of entries yielded by the iterator. `0` corresponds to the
+  /// root path of this walk.
+  ///
+  /// A depth < 2 will automatically change `thread_count` to 1. `jwalks`
+  /// parrallelism happens at the `fs::read_dir` level. It only makes sense to
+  /// use multiple threads when reading more then one directory.
+  pub fn max_depth(mut self, depth: usize) -> Self {
+    self.options.max_depth = depth;
+    if depth == 1 {
+      self.options.num_threads = 1;
+    }
+    self
+  }
+
+  /// - `0` Use rayon global pool.
+  /// - `1` Perform walk on calling thread.
+  /// - `n > 1` Construct a new rayon ThreadPool to perform the walk.
+  pub fn num_threads(mut self, n: usize) -> Self {
+    self.options.num_threads = n;
+    self
+  }
+
+  /// A callback function to process (sort/filter/skip) each directory of
+  /// entries before they are yeilded. From within this callback use
   /// [`entry.set_content_spec(None)`](struct.DirEntry.html#method.content_spec)
   /// to yeild that directory but skip descending into its contents.
   pub fn process_entries<F>(mut self, process_by: F) -> Self
@@ -188,7 +185,7 @@ impl IntoIterator for WalkDir {
 
       if sort {
         dir_entry_results.sort_by(|a, b| match (a, b) {
-          (Ok(a), Ok(b)) => a.file_name().cmp(b.file_name()),
+          (Ok(a), Ok(b)) => a.file_name.cmp(&b.file_name),
           (Ok(_), Err(_)) => Ordering::Less,
           (Err(_), Ok(_)) => Ordering::Greater,
           (Err(_), Err(_)) => Ordering::Equal,

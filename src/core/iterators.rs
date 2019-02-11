@@ -44,8 +44,6 @@ impl Iterator for ReadDirIter {
 }
 
 /// Iterator yielding directory entries.
-///
-/// Flattens a `ReadDirIter` into an iterator over individual `Result<DirEntry>`.
 pub struct DirEntryIter {
   read_dir_iter_stack: Vec<vec::IntoIter<Result<DirEntry>>>,
   read_dir_iter: Peekable<ReadDirIter>,
@@ -96,8 +94,8 @@ impl Iterator for DirEntryIter {
           Err(err) => return Some(Err(err)),
         };
 
-        if dir_entry.expects_content() {
-          dir_entry.set_read_content_error(self.push_next_read_dir_iter());
+        if dir_entry.content_spec.is_some() {
+          dir_entry.content_error = self.push_next_read_dir_iter();
         }
 
         return Some(Ok(dir_entry));
