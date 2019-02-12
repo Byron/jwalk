@@ -137,15 +137,11 @@ impl IntoIterator for WalkDir {
     let num_threads = self.options.num_threads;
     let skip_hidden = self.options.skip_hidden;
     let max_depth = self.options.max_depth;
-    let limit_depth = max_depth != ::std::usize::MAX;
-    let root_depth = self.root.iter().count();
     let preload_metadata = self.options.preload_metadata;
     let process_entries = self.options.process_entries.clone();
 
     core::walk(&self.root, num_threads, move |read_dir_spec| {
-      let at_depth_limit =
-        limit_depth && read_dir_spec.path.components().count() + 1 == (root_depth + max_depth);
-
+      let depth = read_dir_spec.depth + 1;
       let mut dir_entry_results: Vec<_> = fs::read_dir(&read_dir_spec.path)?
         .filter_map(|dir_entry_result| {
           let dir_entry = match dir_entry_result {
@@ -167,9 +163,9 @@ impl IntoIterator for WalkDir {
 
           let content_spec = match file_type {
             Ok(file_type) => {
-              if file_type.is_dir() && !at_depth_limit {
+              if file_type.is_dir() && depth < max_depth {
                 let path = read_dir_spec.path.join(dir_entry.file_name());
-                Some(Arc::new(ReadDirSpec::new(path, None)))
+                Some(Arc::new(ReadDirSpec::new(path, depth, None)))
               } else {
                 None
               }
@@ -178,6 +174,7 @@ impl IntoIterator for WalkDir {
           };
 
           Some(Ok(DirEntry::new(
+            depth,
             file_name,
             file_type,
             metadata,

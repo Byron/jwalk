@@ -13,7 +13,9 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
       let each_entry = each_result.unwrap();
       let path = each_entry.path().to_path_buf();
       let path = path.strip_prefix(&test_dir).unwrap().to_path_buf();
-      path.to_str().unwrap().to_string()
+      let mut path_string = path.to_str().unwrap().to_string();
+      path_string.push_str(&format!(" ({})", each_entry.depth));
+      path_string
     })
     .collect()
 }
@@ -21,26 +23,25 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
 #[test]
 fn walk() {
   let paths = local_paths(WalkDir::new(test_dir()));
-  assert!(paths.contains(&"b.txt".to_string()));
-  assert!(paths.contains(&"group 1".to_string()));
-  assert!(paths.contains(&"group 1/d.txt".to_string()));
+  assert!(paths.contains(&"b.txt (1)".to_string()));
+  assert!(paths.contains(&"group 1 (1)".to_string()));
+  assert!(paths.contains(&"group 1/d.txt (2)".to_string()));
 }
 
 #[test]
 fn sort_by_name_single_thread() {
   let paths = local_paths(WalkDir::new(test_dir()).num_threads(1).sort(true));
-  println!("JESSE {:?}", paths);
   assert!(
     paths
       == vec![
-        "",
-        "a.txt",
-        "b.txt",
-        "c.txt",
-        "group 1",
-        "group 1/d.txt",
-        "group 2",
-        "group 2/e.txt",
+        " (0)",
+        "a.txt (1)",
+        "b.txt (1)",
+        "c.txt (1)",
+        "group 1 (1)",
+        "group 1/d.txt (2)",
+        "group 2 (1)",
+        "group 2/e.txt (2)",
       ]
   );
 }
@@ -51,14 +52,14 @@ fn sort_by_name_rayon_pool_global() {
   assert!(
     paths
       == vec![
-        "",
-        "a.txt",
-        "b.txt",
-        "c.txt",
-        "group 1",
-        "group 1/d.txt",
-        "group 2",
-        "group 2/e.txt",
+        " (0)",
+        "a.txt (1)",
+        "b.txt (1)",
+        "c.txt (1)",
+        "group 1 (1)",
+        "group 1/d.txt (2)",
+        "group 2 (1)",
+        "group 2/e.txt (2)",
       ]
   );
 }
@@ -69,14 +70,14 @@ fn sort_by_name_rayon_pool_2_threads() {
   assert!(
     paths
       == vec![
-        "",
-        "a.txt",
-        "b.txt",
-        "c.txt",
-        "group 1",
-        "group 1/d.txt",
-        "group 2",
-        "group 2/e.txt",
+        " (0)",
+        "a.txt (1)",
+        "b.txt (1)",
+        "c.txt (1)",
+        "group 1 (1)",
+        "group 1/d.txt (2)",
+        "group 2 (1)",
+        "group 2/e.txt (2)",
       ]
   );
 }
@@ -84,14 +85,23 @@ fn sort_by_name_rayon_pool_2_threads() {
 #[test]
 fn see_hidden_files() {
   let paths = local_paths(WalkDir::new(test_dir()).skip_hidden(false).sort(true));
-  assert!(paths.contains(&"group 2/.hidden_file.txt".to_string()));
+  assert!(paths.contains(&"group 2/.hidden_file.txt (2)".to_string()));
 }
 
 #[test]
 fn max_depth() {
   let paths = local_paths(WalkDir::new(test_dir()).max_depth(1).sort(true));
-  println!("{:?}", paths);
-  assert!(paths == vec!["", "a.txt", "b.txt", "c.txt", "group 1", "group 2",]);
+  assert!(
+    paths
+      == vec![
+        " (0)",
+        "a.txt (1)",
+        "b.txt (1)",
+        "c.txt (1)",
+        "group 1 (1)",
+        "group 2 (1)",
+      ]
+  );
 }
 
 #[test]

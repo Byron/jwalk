@@ -24,6 +24,8 @@ pub struct ReadDir {
 pub struct ReadDirSpec {
   /// The directory to read.
   pub path: PathBuf,
+  /// Depth of the directory to read relative to root of walk.
+  pub depth: usize,
   /// Location where
   /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
   /// function can store walk state. This is a placeholder right now. One
@@ -64,9 +66,14 @@ impl IntoIterator for ReadDir {
 }
 
 impl ReadDirSpec {
-  pub fn new<P: Into<PathBuf>>(path: P, state: Option<Box<Any + Send + Sync>>) -> ReadDirSpec {
+  pub fn new<P: Into<PathBuf>>(
+    path: P,
+    depth: usize,
+    state: Option<Box<Any + Send + Sync>>,
+  ) -> ReadDirSpec {
     ReadDirSpec {
       path: path.into(),
+      depth,
       state,
     }
   }
