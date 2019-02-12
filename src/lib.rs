@@ -142,6 +142,11 @@ impl IntoIterator for WalkDir {
 
     core::walk(&self.root, num_threads, move |read_dir_spec| {
       let depth = read_dir_spec.depth + 1;
+
+      if depth > max_depth {
+        return Ok(ReadDir::new(Vec::new()));
+      }
+
       let mut dir_entry_results: Vec<_> = fs::read_dir(&read_dir_spec.path)?
         .filter_map(|dir_entry_result| {
           let dir_entry = match dir_entry_result {
@@ -178,7 +183,7 @@ impl IntoIterator for WalkDir {
             file_name,
             file_type,
             metadata,
-            Some(read_dir_spec.clone()),
+            read_dir_spec.clone(),
             content_spec,
           )))
         })

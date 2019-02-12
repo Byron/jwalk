@@ -89,7 +89,13 @@ fn see_hidden_files() {
 }
 
 #[test]
-fn max_depth() {
+fn max_depth_0() {
+  let paths = local_paths(WalkDir::new(test_dir()).max_depth(0).sort(true));
+  assert!(paths == vec![" (0)",]);
+}
+
+#[test]
+fn max_depth_1() {
   let paths = local_paths(WalkDir::new(test_dir()).max_depth(1).sort(true));
   assert!(
     paths
@@ -114,6 +120,11 @@ fn walk_file() {
 
 #[test]
 fn walk_root() {
-  let mut iter = walkdir::WalkDir::new("/").max_depth(1).into_iter();
-  assert!(iter.next().unwrap().unwrap().file_name() == "/");
+  let paths: Vec<_> = WalkDir::new("/")
+    .max_depth(1)
+    .sort(true)
+    .into_iter()
+    .filter_map(|each| Some(each.ok()?.path()))
+    .collect();
+  assert!(paths.first().unwrap().to_str().unwrap() == "/");
 }
