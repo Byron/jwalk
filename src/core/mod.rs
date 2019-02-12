@@ -35,7 +35,7 @@ where
   let root_entry_result = DirEntry::try_from(&path);
   let ordered_read_dir_spec = root_entry_result.as_ref().ok().and_then(|root_entry| {
     if root_entry.file_type.as_ref().ok()?.is_dir() {
-      let read_dir_spec = Arc::new(ReadDirSpec::new(path, 0, None));
+      let read_dir_spec = Arc::new(ReadDirSpec::new(path, None));
       return Some(Ordered::new(read_dir_spec, IndexPath::new(vec![0]), 0));
     }
     None

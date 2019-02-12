@@ -14,8 +14,6 @@ use super::ReadDirSpec;
 /// descriptor.
 #[derive(Debug)]
 pub struct DirEntry {
-  /// Depth of this entry relative to the root directory where the walk started.
-  pub depth: usize,
   /// File name of this entry without leading path component.
   pub file_name: OsString,
   /// File type result for the file/directory that this entry points at.
@@ -41,7 +39,6 @@ pub struct DirEntry {
 
 impl DirEntry {
   pub(crate) fn new(
-    depth: usize,
     file_name: OsString,
     file_type: Result<FileType>,
     metadata: Option<Result<Metadata>>,
@@ -49,7 +46,6 @@ impl DirEntry {
     content_spec: Option<Arc<ReadDirSpec>>,
   ) -> DirEntry {
     DirEntry {
-      depth,
       file_name,
       file_type,
       parent_spec,
@@ -86,10 +82,9 @@ impl DirEntry {
     let file_name = path.file_name().unwrap_or(&root_name);
     let parent_spec = path
       .parent()
-      .map(|parent| Arc::new(ReadDirSpec::new(parent.to_path_buf(), 0, None)));
+      .map(|parent| Arc::new(ReadDirSpec::new(parent.to_path_buf(), None)));
 
     Ok(DirEntry::new(
-      0,
       file_name.to_owned(),
       Ok(metadata.file_type()),
       Some(Ok(metadata)),
