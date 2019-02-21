@@ -85,7 +85,7 @@ impl WalkDir {
     self
   }
 
-  /// Preload metadata before yeilding entries. When running in parrallel the
+  /// Preload metadata before yielding entries. When running in parrallel the
   /// metadata is loaded in rayon's thread pool.
   pub fn preload_metadata(mut self, preload_metadata: bool) -> Self {
     self.options.preload_metadata = preload_metadata;
@@ -115,9 +115,9 @@ impl WalkDir {
   }
 
   /// A callback function to process (sort/filter/skip) each directory of
-  /// entries before they are yeilded. Modify the given array to sort/filter
+  /// entries before they are yielded. Modify the given array to sort/filter
   /// entries. Use [`entry.content_spec =
-  /// None`](struct.DirEntry.html#field.content_spec) to yeild an entry but skip
+  /// None`](struct.DirEntry.html#field.content_spec) to yield an entry but skip
   /// reading its contents.
   pub fn process_entries<F>(mut self, process_by: F) -> Self
   where
