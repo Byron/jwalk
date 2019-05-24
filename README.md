@@ -55,4 +55,4 @@ implementation.
 ### Benchmarks
 
 [Benchmarks](https://github.com/jessegrosjean/jwalk/blob/master/benches/benchmarks.md)
-comparing this crate with `jwalk` and `ignore`.
+comparing this crate with `walkdir` and `ignore`.
