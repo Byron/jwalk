@@ -1,7 +1,7 @@
 Time to walk linux's source tree on iMac (Retina 5K, 27-inch, Late 2015):
 
 |                    | threads  | jwalk      | ignore     | walkdir      |
-|-------------------------------|------------|------------|--------------|
+|--------------------|----------|------------|------------|--------------|
 | unsorted           | 8        | 54.631 ms  | 70.848 ms  | -            |
 | sorted             | 8        | 56.133 ms  | 93.345 ms  | -            |
 | sorted, metadata   | 8        | 86.985 ms  | 122.08 ms  | -            |
