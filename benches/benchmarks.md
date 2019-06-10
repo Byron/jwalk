@@ -1,13 +1,24 @@
 Time to walk linux's source tree on iMac (Retina 5K, 27-inch, Late 2015):
 
-|                                | jwalk        | ignore       | walkdir      |
-|--------------------------------|--------------|--------------|--------------|
-| Unsorted, parallel             | 54.026 ms    | 68.594 ms    | -            |
-| unsorted, parallel (2 threads) | 98.869 ms    | -            | -            |
-| sorted, parallel               | 55.988 ms    | 94.374 ms    | -            |
-| sorted, parallel, metadata     | 97.502 ms    | 131.50 ms    | -            |
-| unsorted, serial               | 170.86 ms    | -            | -            |
-| sorted, parallel, first 100    | 9.0272 ms    | -            | -            |
-| unsorted                       | -            | -            | 162.97 ms    |
-| sorted                         | -            | -            | 198.16 ms    |
-| sorted, metadata               | -            | -            | 422.49 ms    |
+|                    | threads  | jwalk      | ignore     | walkdir      |
+|-------------------------------|------------|------------|--------------|
+| unsorted           | 8        | 54.631 ms  | 70.848 ms  | -            |
+| sorted             | 8        | 56.133 ms  | 93.345 ms  | -            |
+| sorted, metadata   | 8        | 86.985 ms  | 122.08 ms  | -            |
+| sorted, first 100  | 8        | 8.9931 ms  | -          | -            |
+| unsorted           | 2        | 88.416 ms  | 108.97 ms  | -            |
+| unsorted           | 1        | 141.66 ms  | -          | 134.28 ms    |
+| sorted             | 1        | 150.89 ms  | -          | 170.24 ms    |
+| sorted, metadata   | 1        | 313.91 ms  | -          | 310.26 ms    |
+
+## Notes
+
+Comparing the performance of `jwalk`, `ignore`, and `walkdir` and how well they
+can use multiple threads.
+
+Options:
+
+- "unsorted" means entries are returned in `read_dir` order.
+- "sorted" means entries are returned sorted by name.
+- "metadata" means filesystem metadata is loaded for each entry.
+- "first 100" means only first 100 entries are taken.

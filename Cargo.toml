@@ -22,7 +22,7 @@ crossbeam = "0.7.1"
 [dev-dependencies]
 criterion = "0.2.11"
 fs_extra = "1.1.0"
-walkdir = "2.2.7"
+walkdir = "2.2.8"
 ignore = "0.4.7"
 tempfile = "3.0.5"
 num_cpus = "1.10"

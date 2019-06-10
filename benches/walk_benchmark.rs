@@ -32,15 +32,15 @@ fn checkout_linux_if_needed() {
 fn walk_benches(c: &mut Criterion) {
     checkout_linux_if_needed();
 
-    c.bench_function("jwalk (unsorted, parallel)", |b| {
+    c.bench_function("jwalk (unsorted, n threads)", |b| {
         b.iter(|| for _ in WalkDir::new(linux_dir()) {})
     });
 
-    c.bench_function("jwalk (sorted, parallel)", |b| {
+    c.bench_function("jwalk (sorted, n threads)", |b| {
         b.iter(|| for _ in WalkDir::new(linux_dir()).sort(true) {})
     });
 
-    c.bench_function("jwalk (sorted, parallel, metadata)", |b| {
+    c.bench_function("jwalk (sorted, metadata, n threads)", |b| {
         b.iter(
             || {
                 for _ in WalkDir::new(linux_dir()).sort(true).preload_metadata(true) {}
@@ -48,7 +48,7 @@ fn walk_benches(c: &mut Criterion) {
         )
     });
 
-    c.bench_function("jwalk (sorted, parallel, first 100)", |b| {
+    c.bench_function("jwalk (sorted, n threads, first 100)", |b| {
         b.iter(
             || {
                 for _ in WalkDir::new(linux_dir()).sort(true).into_iter().take(100) {}
@@ -56,15 +56,29 @@ fn walk_benches(c: &mut Criterion) {
         )
     });
 
-    c.bench_function("jwalk (unsorted, parallel (2 threads))", |b| {
+    c.bench_function("jwalk (unsorted, 2 threads)", |b| {
         b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(2) {})
     });
 
-    c.bench_function("jwalk (unsorted, serial)", |b| {
+    c.bench_function("jwalk (unsorted, 1 thread)", |b| {
         b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(1) {})
     });
 
-    c.bench_function("ignore (unsorted, parallel)", move |b| {
+    c.bench_function("jwalk (sorted, 1 thread)", |b| {
+        b.iter(|| for _ in WalkDir::new(linux_dir()).sort(true).num_threads(1) {})
+    });
+
+    c.bench_function("jwalk (sorted, metadata, 1 thread)", |b| {
+        b.iter(|| {
+            for _ in WalkDir::new(linux_dir())
+                .sort(true)
+                .preload_metadata(true)
+                .num_threads(1)
+            {}
+        })
+    });
+
+    c.bench_function("ignore (unsorted, n threads)", move |b| {
         b.iter(|| {
             WalkBuilder::new(linux_dir())
                 .hidden(false)
@@ -75,7 +89,7 @@ fn walk_benches(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("ignore (sorted, parallel)", move |b| {
+    c.bench_function("ignore (sorted, n threads)", move |b| {
         b.iter(|| {
             let (tx, rx) = mpsc::channel();
             WalkBuilder::new(linux_dir())
@@ -97,7 +111,7 @@ fn walk_benches(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("ignore (parallel, sorted, metadata)", move |b| {
+    c.bench_function("ignore (sorted, metadata, n threads)", move |b| {
         b.iter(|| {
             let (tx, rx) = mpsc::channel();
             WalkBuilder::new(linux_dir())
@@ -120,11 +134,22 @@ fn walk_benches(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("walkdir (unsorted)", move |b| {
+    c.bench_function("ignore (unsorted, 2 threads)", move |b| {
+        b.iter(|| {
+            WalkBuilder::new(linux_dir())
+                .hidden(false)
+                .standard_filters(false)
+                .threads(cmp::min(2, num_cpus::get()))
+                .build_parallel()
+                .run(move || Box::new(move |_| ignore::WalkState::Continue));
+        })
+    });
+
+    c.bench_function("walkdir (unsorted, 1 thread)", move |b| {
         b.iter(|| for _ in walkdir::WalkDir::new(linux_dir()) {})
     });
 
-    c.bench_function("walkdir (sorted)", move |b| {
+    c.bench_function("walkdir (sorted, 1 thread)", move |b| {
         b.iter(|| {
             for _ in
                 walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name()))
@@ -133,7 +158,7 @@ fn walk_benches(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("walkdir (sorted, metadata)", move |b| {
+    c.bench_function("walkdir (sorted, metadata, 1 thread)", move |b| {
         b.iter(|| {
             for each in
                 walkdir::WalkDir::new(linux_dir()).sort_by(|a, b| a.file_name().cmp(b.file_name()))
