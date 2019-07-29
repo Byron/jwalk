@@ -36,6 +36,8 @@ use crate::core::ReadDir;
 pub use crate::core::{DirEntry, DirEntryIter, ReadDirSpec};
 
 /// Builder for walking a directory.
+///
+/// Note that symlinks are always followed when walking.
 pub struct WalkDir {
     root: PathBuf,
     options: WalkDirOptions,
@@ -92,6 +94,9 @@ impl WalkDir {
 
     /// Preload metadata before yielding entries. When running in parrallel the
     /// metadata is loaded in rayon's thread pool.
+    ///
+    /// This is equivalent to calling `std::fs::symlink_metadata` on all
+    /// entries.
     pub fn preload_metadata(mut self, preload_metadata: bool) -> Self {
         self.options.preload_metadata = preload_metadata;
         self

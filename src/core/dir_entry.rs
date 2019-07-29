@@ -23,7 +23,8 @@ pub struct DirEntry {
     /// Metadata result for the file/directory that this entry points at. Defaults
     /// to `None`. Filled in by the walk process when the
     /// [`preload_metadata`](struct.WalkDir.html#method.preload_metadata) option
-    /// is set.
+    /// is set. Note that this is equivalent to what `std::fs::symlink_metadata`
+    /// returns.
     pub metadata: Option<Result<Metadata>>,
     /// [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
     /// content entries. This is automatically set for directories. The
