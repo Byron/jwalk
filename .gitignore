@@ -65,3 +65,4 @@ version.texi
 no_llvm_build
 
 /benches/assets/linux_checkout
+Cargo.lock
