@@ -148,7 +148,7 @@ where
                 }
                 Err(err) => match err {
                     TryRecvError::Empty => thread::yield_now(),
-                    TryRecvError::Disconnected => break,
+                    TryRecvError::Disconnected => break
                 },
             }
         }

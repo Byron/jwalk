@@ -3,7 +3,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
-use jwalk::WalkDir;
+use jwalk::{Parallelism, WalkDir};
 use num_cpus;
 use std::cmp;
 use std::path::PathBuf;
@@ -57,15 +57,20 @@ fn walk_benches(c: &mut Criterion) {
     });
 
     c.bench_function("jwalk (unsorted, 2 threads)", |b| {
-        b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(2) {})
+        b.iter(|| for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::RayonNewPool(2)) {})
     });
 
     c.bench_function("jwalk (unsorted, 1 thread)", |b| {
-        b.iter(|| for _ in WalkDir::new(linux_dir()).num_threads(1) {})
+        b.iter(|| for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::Serial) {})
     });
 
     c.bench_function("jwalk (sorted, 1 thread)", |b| {
-        b.iter(|| for _ in WalkDir::new(linux_dir()).sort(true).num_threads(1) {})
+        b.iter(|| {
+            for _ in WalkDir::new(linux_dir())
+                .sort(true)
+                .parallelism(Parallelism::Serial)
+            {}
+        })
     });
 
     c.bench_function("jwalk (sorted, metadata, 1 thread)", |b| {
@@ -73,7 +78,7 @@ fn walk_benches(c: &mut Criterion) {
             for _ in WalkDir::new(linux_dir())
                 .sort(true)
                 .preload_metadata(true)
-                .num_threads(1)
+                .parallelism(Parallelism::Serial)
             {}
         })
     });

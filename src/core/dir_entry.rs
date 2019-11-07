@@ -4,7 +4,7 @@ use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::ReadDirSpec;
+use crate::{ClientState, ReadDirSpec};
 
 /// Representation of a file or directory.
 ///
@@ -13,61 +13,66 @@ use super::ReadDirSpec;
 /// `std::fs::DirEntry`. This allows it to quickly drop the underlying file
 /// descriptor.
 #[derive(Debug)]
-pub struct DirEntry {
-    /// Depth of this entry relative to the root directory where the walk started.
+pub struct DirEntry<C: ClientState> {
+    /// Depth of this entry relative to the root directory where the walk
+    /// started.
     pub depth: usize,
     /// File name of this entry without leading path component.
     pub file_name: OsString,
     /// File type result for the file/directory that this entry points at.
-    pub file_type: Result<FileType>,
+    pub file_type_result: Result<FileType>,
     /// Metadata result for the file/directory that this entry points at. Defaults
     /// to `None`. Filled in by the walk process when the
     /// [`preload_metadata`](struct.WalkDir.html#method.preload_metadata) option
     /// is set.
-    pub metadata: Option<Result<Metadata>>,
-    /// [`ReadDirSpec`](struct.ReadDirSpec.html) used for reading this entry's
-    /// content entries. This is automatically set for directories. The
-    /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
-    /// may set this field to `None` to skip reading the contents of this
+    pub metadata_result: Option<Result<Metadata>>,
+    /// Field where clients can store state from within the The
+    /// [`process_entries`](struct.WalkDirGeneric.html#method.process_entries)
+    /// callback. This state will be cloned once for entries that have a
+    /// `read_children_path` set.
+    pub client_state: C,
+    /// Path used by this entry's parent to read this entry.
+    pub parent_path: Arc<PathBuf>,
+    /// Path that will be used to read child entries. This is automatically set
+    /// for directories. The
+    /// [`process_entries`](struct.WalkDirGeneric.html#method.process_entries) callback
+    /// may set this field to `None` to skip reading the contents of a
     /// particular directory.
-    pub content_spec: Option<Arc<ReadDirSpec>>,
-    /// If `fs::read_dir` generates an error when reading this entry's content
-    /// entries then that error is stored here.
-    pub content_error: Option<Error>,
-    /// [`ReadDirSpec`](struct.ReadDirSpec.html) used by this entry's parent to
-    /// read this entry. If this is the root entry then depth value of this parent
-    /// spec will be `0` even though it should logically be `-1`.
-    pub parent_spec: Arc<ReadDirSpec>,
+    pub read_children_path: Option<Arc<PathBuf>>,
+    /// If `read_children_path` is set and resulting `fs::read_dir` generates an error
+    /// then that error is stored here.
+    pub read_children_error: Option<Error>,
 }
 
-impl DirEntry {
+impl<C: ClientState> DirEntry<C> {
     pub(crate) fn new(
         depth: usize,
         file_name: OsString,
-        file_type: Result<FileType>,
-        metadata: Option<Result<Metadata>>,
-        parent_spec: Arc<ReadDirSpec>,
-        content_spec: Option<Arc<ReadDirSpec>>,
-    ) -> DirEntry {
+        file_type_result: Result<FileType>,
+        metadata_result: Option<Result<Metadata>>,
+        parent_path: Arc<PathBuf>,
+        read_children_path: Option<Arc<PathBuf>>,
+        client_state: C,
+    ) -> DirEntry<C> {
         DirEntry {
             depth,
             file_name,
-            file_type,
-            parent_spec,
-            metadata,
-            content_spec,
-            content_error: None,
+            file_type_result,
+            parent_path,
+            metadata_result,
+            read_children_path,
+            read_children_error: None,
+            client_state,
         }
     }
 
-    pub(crate) fn new_root_with_path(path: &Path) -> Result<DirEntry> {
+    pub(crate) fn new_root_with_path(path: &Path) -> Result<DirEntry<C>> {
         let metadata = fs::metadata(path)?;
         let root_name = OsString::from("/");
         let file_name = path.file_name().unwrap_or(&root_name);
-        let parent_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-        let parent_spec = Arc::new(ReadDirSpec::new(parent_path, 0, None));
-        let content_spec = if metadata.file_type().is_dir() {
-            Some(Arc::new(ReadDirSpec::new(path, 0, None)))
+        let parent_path = Arc::new(path.parent().map(Path::to_path_buf).unwrap_or_default());
+        let read_children_path = if metadata.file_type().is_dir() {
+            Some(Arc::new(path.into()))
         } else {
             None
         };
@@ -77,8 +82,9 @@ impl DirEntry {
             file_name.to_owned(),
             Ok(metadata.file_type()),
             Some(Ok(metadata)),
-            parent_spec,
-            content_spec,
+            parent_path,
+            read_children_path,
+            C::default(),
         ))
     }
 
@@ -86,11 +92,21 @@ impl DirEntry {
     ///
     /// The path is created by joining `parent_path` with `file_name`.
     pub fn path(&self) -> PathBuf {
-        self.parent_spec.path.join(&self.file_name)
+        self.parent_path.join(&self.file_name)
     }
 
     /// Reference to the path of the directory containing this entry.
     pub fn parent_path(&self) -> &Path {
-        &self.parent_spec.path
+        &self.parent_path
+    }
+
+    pub(crate) fn read_children_spec(&self) -> Option<ReadDirSpec<C>> {
+        self.read_children_path.as_ref().map({
+            |children_path| ReadDirSpec {
+                depth: self.depth,
+                path: children_path.clone(),
+                client_state: self.client_state.clone(),
+            }
+        })
     }
 }

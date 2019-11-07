@@ -5,7 +5,7 @@ Filesystem walk.
 
 - Performed in parallel using rayon
 - Entries streamed in sorted order 
-- Custom sort/filter/skip
+- Custom sort/filter/skip/state
 
 [![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)
 [![Latest version](http://meritbadge.herokuapp.com/jwalk)](https://crates.io/crates/jwalk)
@@ -43,8 +43,8 @@ parallelism of `ignore` with `walkdir`'s streaming iterator API.
 
 This crate is particularly fast when you want streamed sorted results. In my
 tests its about 4x `walkdir` speed for sorted results with metadata. Also this
-crate's `process_entries` callback allows you to arbitrarily sort/filter/skip
-entries before they are yielded.
+crate's `process_entries` callback allows you to arbitrarily
+sort/filter/skip/state entries before they are yielded.
 
 ### Why not use this crate?
 

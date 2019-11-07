@@ -28,19 +28,13 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
 }
 
 #[test]
-fn walk() {
+fn walk_serial() {
     let (test_dir, _temp_dir) = test_dir();
-    let paths = local_paths(WalkDir::new(test_dir));
-    assert!(paths.contains(&"b.txt (1)".to_string()));
-    assert!(paths.contains(&"group 1 (1)".to_string()));
-    assert!(paths.contains(&"group 1/d.txt (2)".to_string()));
-    assert!(paths.contains(&"group 2/e.txt (2)".to_string()));
-}
-
-#[test]
-fn sort_by_name_single_thread() {
-    let (test_dir, _temp_dir) = test_dir();
-    let paths = local_paths(WalkDir::new(test_dir).num_threads(1).sort(true));
+    let paths = local_paths(
+        WalkDir::new(test_dir)
+            .parallelism(Parallelism::Serial)
+            .sort(true),
+    );
     assert!(
         paths
             == vec![
@@ -57,28 +51,32 @@ fn sort_by_name_single_thread() {
 }
 
 #[test]
-fn sort_by_name_rayon_pool_global() {
+fn sort_by_name_rayon_custom_2_threads() {
+    let (test_dir, _temp_dir) = test_dir();
+    let paths = local_paths(
+        WalkDir::new(test_dir)
+            .parallelism(Parallelism::RayonNewPool(2))
+            .sort(true),
+    );
+    assert!(
+        paths
+            == vec![
+                " (0)",
+                "a.txt (1)",
+                "b.txt (1)",
+                "c.txt (1)",
+                "group 1 (1)",
+                "group 1/d.txt (2)",
+                "group 2 (1)",
+                "group 2/e.txt (2)",
+            ]
+    );
+}
+
+#[test]
+fn walk_rayon_global() {
     let (test_dir, _temp_dir) = test_dir();
     let paths = local_paths(WalkDir::new(test_dir).sort(true));
-    assert!(
-        paths
-            == vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 1/d.txt (2)",
-                "group 2 (1)",
-                "group 2/e.txt (2)",
-            ]
-    );
-}
-
-#[test]
-fn sort_by_name_rayon_pool_2_threads() {
-    let (test_dir, _temp_dir) = test_dir();
-    let paths = local_paths(WalkDir::new(test_dir).num_threads(2).sort(true));
     assert!(
         paths
             == vec![
@@ -135,6 +133,15 @@ fn walk_file() {
 }
 
 #[test]
+fn walk_file_serial() {
+    let (test_dir, _temp_dir) = test_dir();
+    let walk_dir = WalkDir::new(test_dir.join("a.txt")).parallelism(Parallelism::Serial);
+    let mut iter = walk_dir.into_iter();
+    assert!(iter.next().unwrap().unwrap().file_name.to_str().unwrap() == "a.txt");
+    assert!(iter.next().is_none());
+}
+
+#[test]
 fn error_when_path_does_not_exist() {
     let (test_dir, _temp_dir) = test_dir();
     let walk_dir = WalkDir::new(test_dir.join("path_does_not_exist"));
@@ -146,27 +153,29 @@ fn error_when_path_does_not_exist() {
 #[test]
 fn error_when_path_removed_durring_iteration() {
     let (test_dir, _temp_dir) = test_dir();
-    let walk_dir = WalkDir::new(&test_dir).num_threads(1).sort(true);
+    let walk_dir = WalkDir::new(&test_dir)
+        .parallelism(Parallelism::Serial)
+        .sort(true);
     let mut iter = walk_dir.into_iter();
 
     // Read root. read_dir for root is also called since single thread mode.
-    iter.next().unwrap().is_ok(); // " (0)",
+    let _ = iter.next().unwrap().is_ok(); // " (0)",
 
     // Remove group 2 dir from disk
     fs_extra::remove_items(&vec![test_dir.join("group 2")]).unwrap();
 
-    iter.next().unwrap().is_ok(); // "a.txt (1)",
-    iter.next().unwrap().is_ok(); // "b.txt (1)",
-    iter.next().unwrap().is_ok(); // "c.txt (1)",
-    iter.next().unwrap().is_ok(); // "group 1 (1)",
-    iter.next().unwrap().is_ok(); // "group 1/d.txt (2)",
+    let _ = iter.next().unwrap().is_ok(); // "a.txt (1)",
+    let _ = iter.next().unwrap().is_ok(); // "b.txt (1)",
+    let _ = iter.next().unwrap().is_ok(); // "c.txt (1)",
+    let _ = iter.next().unwrap().is_ok(); // "group 1 (1)",
+    let _ = iter.next().unwrap().is_ok(); // "group 1/d.txt (2)",
 
     // group 2 is read correctly, since it was read before path removed.
     let group_2 = iter.next().unwrap().unwrap();
 
     // group 2 content error IS set, since path is removed when try read_dir for
     // group 2 path.
-    group_2.content_error.is_some();
+    let _ = group_2.read_children_error.is_some();
 
     // done!
     assert!(iter.next().is_none());
@@ -181,4 +190,84 @@ fn walk_root() {
         .filter_map(|each| Some(each.ok()?.path()))
         .collect();
     assert!(paths.first().unwrap().to_str().unwrap() == "/");
+}
+
+#[test]
+fn filter_groups_with_process_entries() {
+    let (test_dir, _temp_dir) = test_dir();
+    let paths = local_paths(
+        WalkDir::new(test_dir)
+            .sort(true)
+            // Filter groups out manually
+            .process_entries(|_parent, children| {
+                children.retain(|each_result| {
+                    each_result
+                        .as_ref()
+                        .map(|dir_entry| {
+                            !dir_entry.file_name.to_string_lossy().starts_with("group")
+                        })
+                        .unwrap_or(true)
+                });
+            }),
+    );
+    assert!(paths == vec![" (0)", "a.txt (1)", "b.txt (1)", "c.txt (1)",]);
+}
+
+#[test]
+fn filter_group_children_with_process_entries() {
+    let (test_dir, _temp_dir) = test_dir();
+    let paths = local_paths(
+        WalkDir::new(test_dir)
+            .sort(true)
+            // Filter group children
+            .process_entries(|_parent, children| {
+                children.iter_mut().for_each(|each_result| {
+                    if let Ok(each) = each_result {
+                        if each.file_name.to_string_lossy().starts_with("group") {
+                            each.read_children_path = None;
+                        }
+                    }
+                });
+            }),
+    );
+    assert!(
+        paths
+            == vec![
+                " (0)",
+                "a.txt (1)",
+                "b.txt (1)",
+                "c.txt (1)",
+                "group 1 (1)",
+                "group 2 (1)",
+            ]
+    );
+}
+
+#[test]
+fn save_state_with_process_entries() {
+    let (test_dir, _temp_dir) = test_dir();
+
+    // Test that both parent client state and children client state can be set
+    // from process_entries callback.
+    let mut iter = WalkDirGeneric::<usize>::new(test_dir)
+        .sort(true)
+        .process_entries(|parent_client_state, children| {
+            *parent_client_state += children.len();
+            children.iter_mut().for_each(|each_result| {
+                if let Ok(each) = each_result {
+                    each.client_state = 1;
+                }
+            });
+        })
+        .into_iter();
+
+    assert!(iter.next().unwrap().unwrap().client_state == 6); // " (0)"
+    assert!(iter.next().unwrap().unwrap().client_state == 1); // "a.txt (1)"
+    assert!(iter.next().unwrap().unwrap().client_state == 1); // "b.txt (1)"
+    assert!(iter.next().unwrap().unwrap().client_state == 1); // "c.txt (1)"
+    assert!(iter.next().unwrap().unwrap().client_state == 2); // "group 1 (1)",
+    assert!(iter.next().unwrap().unwrap().client_state == 1); // "group 1/d.txt (2)",
+    assert!(iter.next().unwrap().unwrap().client_state == 2); // "group 2 (1)",
+    assert!(iter.next().unwrap().unwrap().client_state == 1); // "group 2/e.txt (2)",
+    assert!(iter.next().is_none());
 }
