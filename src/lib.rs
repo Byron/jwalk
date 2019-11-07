@@ -70,7 +70,7 @@
 //!             *parent_client_state = true;
 //!             if let Ok(dir_entry) = dir_entry_result {
 //!                 dir_entry.client_state = true;
-//!             }             
+//!             }
 //!         });
 //!     });
 //!

@@ -36,17 +36,3 @@ impl<C: ClientState> ReadDir<C> {
             .collect()
     }
 }
-
-/*
-pub struct ReadDir<C: ClientState> {
-    pub(crate) parent_client_state: C,
-    pub(crate) dir_entry_results: Vec<Result<DirEntry<C>>>,
-}
-
-impl<C: ClientState> IntoIterator for ReadDir<C> {
-    type Item = Result<DirEntry<C>>;
-    type IntoIter = vec::IntoIter<Result<DirEntry<C>>>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.dir_entry_results.into_iter()
-    }
-}*/

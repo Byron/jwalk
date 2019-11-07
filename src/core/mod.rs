@@ -1,5 +1,3 @@
-//! A flexible walk function suitable for arbitrary sorting/filtering.
-
 mod dir_entry;
 mod dir_entry_iter;
 mod index_path;
