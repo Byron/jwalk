@@ -41,7 +41,7 @@ pub struct WalkDir {
     options: WalkDirOptions,
 }
 
-type ProcessEntriesFunction = Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static;
+type ProcessEntriesFunction = dyn Fn(&mut Vec<Result<DirEntry>>) + Send + Sync + 'static;
 
 struct WalkDirOptions {
     sort: bool,

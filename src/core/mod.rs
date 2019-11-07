@@ -58,7 +58,7 @@ where
 
 /// Client's read dir function.
 pub(crate) type ClientReadDirFunction =
-    Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Sync + 'static;
+    dyn Fn(Arc<ReadDirSpec>) -> Result<ReadDir> + Send + Sync + 'static;
 
 struct RunContext {
     stop: Arc<AtomicBool>,

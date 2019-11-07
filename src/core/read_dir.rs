@@ -31,7 +31,7 @@ pub struct ReadDirSpec {
     /// function can store walk state. This is a placeholder right now. One
     /// intended use case is to store `.gitignore` state to filter entries during
     /// the walk.
-    pub state: Option<Box<Any + Send + Sync>>,
+    pub state: Option<Box<dyn Any + Send + Sync>>,
 }
 
 impl ReadDir {
@@ -68,7 +68,7 @@ impl ReadDirSpec {
     pub fn new<P: Into<PathBuf>>(
         path: P,
         depth: usize,
-        state: Option<Box<Any + Send + Sync>>,
+        state: Option<Box<dyn Any + Send + Sync>>,
     ) -> ReadDirSpec {
         ReadDirSpec {
             path: path.into(),
