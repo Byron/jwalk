@@ -67,7 +67,7 @@ impl<C: ClientState> DirEntry<C> {
     }
 
     pub(crate) fn new_root_with_path(path: &Path) -> Result<DirEntry<C>> {
-        let metadata = fs::metadata(path)?;
+        let metadata = fs::symlink_metadata(path)?;
         let root_name = OsString::from("/");
         let file_name = path.file_name().unwrap_or(&root_name);
         let parent_path = Arc::new(path.parent().map(Path::to_path_buf).unwrap_or_default());

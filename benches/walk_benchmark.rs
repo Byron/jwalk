@@ -57,7 +57,7 @@ fn walk_benches(c: &mut Criterion) {
     });
 
     c.bench_function("jwalk (unsorted, 2 threads)", |b| {
-        b.iter(|| for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::RayonNewPool(2)) {})
+        b.iter(|| for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::RayonCustom(2)) {})
     });
 
     c.bench_function("jwalk (unsorted, 1 thread)", |b| {

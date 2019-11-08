@@ -27,9 +27,29 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
         .collect()
 }
 
+
+#[test]
+fn walk() {
+    use walkdir;
+    let (test_dir, _temp_dir) = test_dir();
+    for each in walkdir::WalkDir::new(test_dir).follow_links(false) {
+        let each_s = format!("{:?}", each);
+        let a = each_s;
+    }
+}
+
 #[test]
 fn walk_serial() {
     let (test_dir, _temp_dir) = test_dir();
+
+    let results: Vec<_> = std::fs::read_dir(&test_dir).unwrap().map(|dir_entry_result| {
+        let dir_entry = dir_entry_result.unwrap();
+        let a = std::fs::symlink_metadata(dir_entry.path()).unwrap().file_type().is_symlink();
+        let b = dir_entry.file_type().unwrap().is_symlink();
+        (a, b)
+    }).collect();
+    let results_s = format!("{:?}", results);
+
     let paths = local_paths(
         WalkDir::new(test_dir)
             .parallelism(Parallelism::Serial)
@@ -46,10 +66,13 @@ fn walk_serial() {
                 "group 1/d.txt (2)",
                 "group 2 (1)",
                 "group 2/e.txt (2)",
+                "link_to_a (1)",
+                "link_to_group_1 (1)",
             ]
     );
 }
 
+/*
 #[test]
 fn sort_by_name_rayon_custom_2_threads() {
     let (test_dir, _temp_dir) = test_dir();
@@ -271,3 +294,4 @@ fn save_state_with_process_entries() {
     assert!(iter.next().unwrap().unwrap().client_state == 1); // "group 2/e.txt (2)",
     assert!(iter.next().is_none());
 }
+*/

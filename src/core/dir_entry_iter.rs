@@ -63,6 +63,8 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
             //    and push those results onto results stack, otherwise done.
             if self.read_dir_results_stack.is_empty() {
                 if self.read_dir_iter.peek().is_some() {
+                    // This might not be right... leave warning and think about if is right not! :)
+                    // seems this code is never getting called at the moment for starters
                     self.push_next_read_dir_results();
                 } else {
                     return None;
