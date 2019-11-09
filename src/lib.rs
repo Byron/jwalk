@@ -147,8 +147,9 @@ struct WalkDirOptions<C: ClientState> {
     sort: bool,
     max_depth: usize,
     skip_hidden: bool,
-    parallelism: Parallelism,
+    follow_links: bool,
     preload_metadata: bool,
+    parallelism: Parallelism,
     process_entries: Option<Arc<ProcessEntriesFunction<C>>>,
 }
 
@@ -163,8 +164,9 @@ impl<C: ClientState> WalkDirGeneric<C> {
             options: WalkDirOptions {
                 sort: false,
                 max_depth: ::std::usize::MAX,
-                parallelism: Parallelism::RayonDefaultPool,
                 skip_hidden: true,
+                follow_links: false,
+                parallelism: Parallelism::RayonDefaultPool,
                 preload_metadata: false,
                 process_entries: None,
             },
@@ -187,6 +189,22 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// Skip hidden entries. Enabled by default.
     pub fn skip_hidden(mut self, skip_hidden: bool) -> Self {
         self.options.skip_hidden = skip_hidden;
+        self
+    }
+
+    /// Follow symbolic links. By default, this is disabled.
+    ///
+    /// When `yes` is `true`, symbolic links are followed as if they were normal
+    /// directories and files. If a symbolic link is broken or is involved in a
+    /// loop, an error is yielded.
+    ///
+    /// When enabled, the yielded [`DirEntry`] values represent the target of
+    /// the link while the path corresponds to the link. See the [`DirEntry`]
+    /// type for more details.
+    ///
+    /// [`DirEntry`]: struct.DirEntry.html
+    pub fn follow_links(mut self, follow_links: bool) -> Self {
+        self.options.follow_links = follow_links;
         self
     }
 
@@ -241,17 +259,18 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
 
     fn into_iter(self) -> DirEntryIter<C> {
         let sort = self.options.sort;
+        let max_depth = self.options.max_depth;
         let parallelism = self.options.parallelism;
         let skip_hidden = self.options.skip_hidden;
-        let max_depth = self.options.max_depth;
+        let follow_links = self.options.follow_links;
         let preload_metadata = self.options.preload_metadata;
         let process_entries = self.options.process_entries.clone();
         let root_entry_results = if let Some(process_entries) = process_entries.as_ref() {
-            let mut root_entry_results = vec![DirEntry::new_root_with_path(&self.root)];
+            let mut root_entry_results = vec![DirEntry::from_path(0, &self.root, follow_links)];
             process_entries(&mut C::default(), &mut root_entry_results);
             root_entry_results
         } else {
-            vec![DirEntry::new_root_with_path(&self.root)]
+            vec![DirEntry::from_path(0, &self.root, follow_links)]
         };
 
         DirEntryIter::new(
@@ -272,44 +291,25 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
 
                 let mut dir_entry_results: Vec<_> = fs::read_dir(path.as_ref())?
                     .filter_map(|dir_entry_result| {
-                        let dir_entry = match dir_entry_result {
+                        let fs_dir_entry = match dir_entry_result {
+                            Ok(fs_dir_entry) => fs_dir_entry,
+                            Err(err) => return Some(Err(err)),
+                        };
+
+                        let mut dir_entry = match DirEntry::from_entry(depth, path.clone(), &fs_dir_entry) {
                             Ok(dir_entry) => dir_entry,
                             Err(err) => return Some(Err(err)),
                         };
 
-                        let file_name = dir_entry.file_name();
-                        if skip_hidden && is_hidden(&file_name) {
+                        if skip_hidden && is_hidden(&dir_entry.file_name) {
                             return None;
                         }
 
-                        let file_type = dir_entry.file_type();
-                        let metadata = if preload_metadata {
-                            Some(dir_entry.metadata())
-                        } else {
-                            None
-                        };
+                        if preload_metadata {
+                            dir_entry.metadata_result = Some(fs_dir_entry.metadata());
+                        }
 
-                        let read_children_path = match file_type {
-                            Ok(file_type) => {
-                                let l = file_type.is_symlink();
-                                if file_type.is_dir() && depth < max_depth {
-                                    Some(Arc::new(path.as_ref().join(dir_entry.file_name())))
-                                } else {
-                                    None
-                                }
-                            }
-                            Err(_) => None,
-                        };
-
-                        Some(Ok(DirEntry::new(
-                            depth,
-                            file_name,
-                            file_type,
-                            metadata,
-                            path.clone(),
-                            read_children_path,
-                            C::default(),
-                        )))
+                        Some(Ok(dir_entry))
                     })
                     .collect();
 
@@ -337,8 +337,9 @@ impl<C: ClientState> Clone for WalkDirOptions<C> {
         WalkDirOptions {
             sort: false,
             max_depth: self.max_depth,
-            parallelism: self.parallelism.clone(),
             skip_hidden: self.skip_hidden,
+            follow_links: self.follow_links,
+            parallelism: self.parallelism.clone(),
             preload_metadata: self.preload_metadata,
             process_entries: self.process_entries.clone(),
         }

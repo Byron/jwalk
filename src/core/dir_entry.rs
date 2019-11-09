@@ -19,8 +19,8 @@ pub struct DirEntry<C: ClientState> {
     pub depth: usize,
     /// File name of this entry without leading path component.
     pub file_name: OsString,
-    /// File type result for the file/directory that this entry points at.
-    pub file_type_result: Result<FileType>,
+    /// File type for the file/directory that this entry points at.
+    pub file_type: FileType,
     /// Metadata result for the file/directory that this entry points at. Defaults
     /// to `None`. Filled in by the walk process when the
     /// [`preload_metadata`](struct.WalkDir.html#method.preload_metadata) option
@@ -42,13 +42,75 @@ pub struct DirEntry<C: ClientState> {
     /// If `read_children_path` is set and resulting `fs::read_dir` generates an error
     /// then that error is stored here.
     pub read_children_error: Option<Error>,
+    
+    follow_link: bool,
 }
 
 impl<C: ClientState> DirEntry<C> {
+    pub(crate) fn from_entry(
+        depth: usize,
+        parent_path: Arc<PathBuf>,
+        fs_dir_entry: &fs::DirEntry,
+    ) -> Result<Self> {
+        let file_type = fs_dir_entry.file_type()?;
+        let file_name = fs_dir_entry.file_name();
+        let read_children_path = if file_type.is_dir() {
+            Some(Arc::new(parent_path.join(&file_name)))
+        } else {
+            None
+        };
+
+        Ok(DirEntry {
+            depth,
+            file_name,
+            file_type,
+            follow_link: false,
+            metadata_result: None,
+            parent_path,
+            read_children_path,
+            read_children_error: None,
+            client_state: C::default(),
+        })
+    }
+
+    pub(crate) fn from_path(
+        depth: usize,
+        path: &Path,
+        follow: bool,
+    ) -> Result<Self> {
+        let metadata = if follow {
+            fs::metadata(&path)?
+        } else {
+            fs::symlink_metadata(&path)?
+        };
+
+        let root_name = OsString::from("/");
+        let file_name = path.file_name().unwrap_or(&root_name);
+        let parent_path = Arc::new(path.parent().map(Path::to_path_buf).unwrap_or_default());
+        let read_children_path = if metadata.file_type().is_dir() {
+            Some(Arc::new(path.into()))
+        } else {
+            None
+        };
+
+        Ok(DirEntry {
+            depth,
+            file_name: file_name.to_owned(),
+            file_type: metadata.file_type(),
+            follow_link: false,
+            metadata_result: Some(Ok(metadata)),
+            parent_path,
+            read_children_path,
+            read_children_error: None,
+            client_state: C::default(),
+        })
+    }
+
+    /*
     pub(crate) fn new(
         depth: usize,
         file_name: OsString,
-        file_type_result: Result<FileType>,
+        file_type: FileType,
         metadata_result: Option<Result<Metadata>>,
         parent_path: Arc<PathBuf>,
         read_children_path: Option<Arc<PathBuf>>,
@@ -57,12 +119,13 @@ impl<C: ClientState> DirEntry<C> {
         DirEntry {
             depth,
             file_name,
-            file_type_result,
+            file_type,
             parent_path,
             metadata_result,
             read_children_path,
             read_children_error: None,
             client_state,
+            follow_link: false,
         }
     }
 
@@ -80,19 +143,23 @@ impl<C: ClientState> DirEntry<C> {
         Ok(DirEntry::new(
             0,
             file_name.to_owned(),
-            Ok(metadata.file_type()),
+            metadata.file_type(),
             Some(Ok(metadata)),
             parent_path,
             read_children_path,
             C::default(),
         ))
-    }
+    }*/
 
     /// Path to the file/directory represented by this entry.
     ///
     /// The path is created by joining `parent_path` with `file_name`.
     pub fn path(&self) -> PathBuf {
         self.parent_path.join(&self.file_name)
+    }
+
+    pub fn path_is_symlink(&self) -> bool {
+        self.file_type.is_symlink() || self.follow_link
     }
 
     /// Reference to the path of the directory containing this entry.
