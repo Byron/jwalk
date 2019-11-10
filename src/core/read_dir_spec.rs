@@ -9,7 +9,7 @@ use crate::ClientState;
 /// found in that directory. These specs are then sent to a work queue that is
 /// used to schedule future directory reads. Use
 /// [`max_depth`](struct.WalkDir.html#method.max_depth) and
-/// [`process_entries`](struct.WalkDir.html#method.process_entries) to change
+/// [`process_read_dir`](struct.WalkDir.html#method.process_read_dir) to change
 /// this default behavior.
 #[derive(Debug)]
 pub struct ReadDirSpec<C: ClientState> {
@@ -17,9 +17,9 @@ pub struct ReadDirSpec<C: ClientState> {
     pub depth: usize,
     /// Path of the the directory to read.
     pub path: Arc<PathBuf>,
-    /// Client state that was set in the
-    /// [`process_entries`](struct.WalkDir.html#method.process_entries) callback
-    /// when reading this directories parent. One intended use case is to store
+    /// Client branch state that was set in the
+    /// [`process_read_dir`](struct.WalkDir.html#method.process_read_dir) callback
+    /// when reading this directory's parent. One intended use case is to store
     /// `.gitignore` state to filter entries during the walk.
-    pub client_state: C,
+    pub client_read_state: C::ReadDirState,
 }

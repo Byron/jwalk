@@ -83,7 +83,12 @@ impl<C: ClientState> Iterator for ReadDirIter<C> {
                 let read_dir_result = core_read_dir_callback(read_dir_spec);
 
                 if let Ok(read_dir) = read_dir_result.as_ref() {
-                    for each_spec in read_dir.read_children_specs().into_iter().rev() {
+                    for each_spec in read_dir
+                        .read_children_specs()
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                    {
                         read_dir_spec_stack.push(each_spec);
                     }
                 }

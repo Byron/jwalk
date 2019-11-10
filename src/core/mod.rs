@@ -1,5 +1,6 @@
 mod dir_entry;
 mod dir_entry_iter;
+mod error;
 mod index_path;
 mod ordered;
 mod ordered_queue;
@@ -10,7 +11,7 @@ mod run_context;
 
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
-use std::io::{Result};
+use std::io::Result;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::vec;
@@ -23,6 +24,7 @@ use run_context::*;
 
 pub use dir_entry::DirEntry;
 pub use dir_entry_iter::DirEntryIter;
+pub use error::Error;
 pub use read_dir::ReadDir;
 pub use read_dir_spec::ReadDirSpec;
 

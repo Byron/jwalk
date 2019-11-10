@@ -24,14 +24,14 @@
 //! # Extended Example
 //!
 //! This example uses the
-//! [`process_entries`](struct.WalkDirGeneric.html#method.process_entries)
+//! [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir)
 //! callback for custom:
 //! 1. **Sort** Entries by name
 //! 2. **Filter** Errors and hidden files
 //! 3. **Skip** Content of directories at depth 2
-//! 4. **State** Mark first entry in each directory with
-//!    [`client_state`](struct.DirEntry.html#field.client_state) true. Also mark
-//!    all directories that contain a first entry with true.
+//! 4. **State** Track depth `read_dir_state`. Mark first entry in each
+//!    directory with [`client_state`](struct.DirEntry.html#field.client_state)
+//!    `= true`.
 //!
 //! ```no_run
 //! # use std::io::Error;
@@ -39,8 +39,8 @@
 //! use jwalk::{ WalkDirGeneric };
 //!
 //! # fn try_main() -> Result<(), Error> {
-//! let walk_dir = WalkDirGeneric::<bool>::new("foo")
-//!     .process_entries(|parent_client_state, children| {
+//! let walk_dir = WalkDirGeneric::<((usize),(bool))>::new("foo")
+//!     .process_read_dir(|read_dir_state, children| {
 //!         // 1. Custom sort
 //!         children.sort_by(|a, b| match (a, b) {
 //!             (Ok(a), Ok(b)) => a.file_name.cmp(&b.file_name),
@@ -66,8 +66,8 @@
 //!             }
 //!         });
 //!         // 4. Custom state
+//!         *read_dir_state += 1;
 //!         children.first_mut().map(|dir_entry_result| {
-//!             *parent_client_state = true;
 //!             if let Ok(dir_entry) = dir_entry_result {
 //!                 dir_entry.client_state = true;
 //!             }
@@ -98,14 +98,27 @@ use crate::core::{ReadDir, ReadDirSpec};
 pub use crate::core::{DirEntry, DirEntryIter};
 
 /// Builder for walking a directory.
-pub type WalkDir = WalkDirGeneric<()>;
+pub type WalkDir = WalkDirGeneric<((), ())>;
+
+/// Trait defining client stored used when performing walk.
+///
+///
+/// for state stored in DirEntry's
+/// [`client_state`](struct.DirEntry.html#field.client_state) field.
+///
+/// Client state can be stored from within the
+/// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir) callback.
+/// The type of ClientState is determined by WalkDirGeneric type parameter.
+pub trait ClientState: Send + Default + Debug + 'static {
+    type ReadDirState: Clone + Send + Default + Debug + 'static;
+    type DirEntryState: Send + Default + Debug + 'static;
+}
 
 /// Generic builder for walking a directory.
 ///
 /// [`ClientState`](trait.ClientState.html) type parameter allows you to specify
-/// the type of state that can be stored in DirEntry's
-/// [`client_state`](struct.DirEntry.html#field.client_state) field from within
-/// the [`process_entries`](struct.WalkDirGeneric.html#method.process_entries)
+/// state to be stored with each DirEntry from within the
+/// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir)
 /// callback.
 ///
 /// Use [`WalkDir`](type.WalkDir.html) if you don't need to store client state
@@ -115,22 +128,19 @@ pub struct WalkDirGeneric<C: ClientState> {
     options: WalkDirOptions<C>,
 }
 
-type ProcessEntriesFunction<C> =
-    dyn Fn(&mut C, &mut Vec<Result<DirEntry<C>>>) + Send + Sync + 'static;
-
-/// Trait for state stored in DirEntry's
-/// [`client_state`](struct.DirEntry.html#field.client_state) field.
-///
-/// Client state can be stored from within the
-/// [`process_entries`](struct.WalkDirGeneric.html#method.process_entries) callback.
-/// The type of ClientState is determined by WalkDirGeneric type parameter.
-pub trait ClientState: Clone + Send + Default + Debug + 'static {}
+type ProcessReadDirFunction<C> =
+    dyn Fn(&mut <C as ClientState>::ReadDirState, &mut Vec<Result<DirEntry<C>>>)
+        + Send
+        + Sync
+        + 'static;
 
 /// Degree of parallelism to use when performing walk.
 ///
 /// Parallelism happens at the directory level. It will help when walking deep
 /// filesystems with many directories. It wont help when reading a single
 /// directory with many files.
+///
+/// If you plan to perform lots of per file processing you might want to use Rayon to
 #[derive(Clone)]
 pub enum Parallelism {
     /// Run on calling thread
@@ -145,12 +155,12 @@ pub enum Parallelism {
 
 struct WalkDirOptions<C: ClientState> {
     sort: bool,
+    min_depth: usize,
     max_depth: usize,
     skip_hidden: bool,
     follow_links: bool,
-    preload_metadata: bool,
     parallelism: Parallelism,
-    process_entries: Option<Arc<ProcessEntriesFunction<C>>>,
+    process_read_dir: Option<Arc<ProcessReadDirFunction<C>>>,
 }
 
 impl<C: ClientState> WalkDirGeneric<C> {
@@ -163,12 +173,12 @@ impl<C: ClientState> WalkDirGeneric<C> {
             root: root.as_ref().to_path_buf(),
             options: WalkDirOptions {
                 sort: false,
+                min_depth: 0,
                 max_depth: ::std::usize::MAX,
                 skip_hidden: true,
                 follow_links: false,
                 parallelism: Parallelism::RayonDefaultPool,
-                preload_metadata: false,
-                process_entries: None,
+                process_read_dir: None,
             },
         }
     }
@@ -179,7 +189,7 @@ impl<C: ClientState> WalkDirGeneric<C> {
     }
 
     /// Sort entries by `file_name` per directory. Defaults to `false`. Use
-    /// [`process_entries`](struct.WalkDirGeneric.html#method.process_entries) for custom
+    /// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir) for custom
     /// sorting or filtering.
     pub fn sort(mut self, sort: bool) -> Self {
         self.options.sort = sort;
@@ -208,23 +218,39 @@ impl<C: ClientState> WalkDirGeneric<C> {
         self
     }
 
-    /// Preload metadata before yielding entries. When running in parrallel the
-    /// metadata is loaded in rayon's thread pool.
-    pub fn preload_metadata(mut self, preload_metadata: bool) -> Self {
-        self.options.preload_metadata = preload_metadata;
+    /// Set the minimum depth of entries yielded by the iterator.
+    ///
+    /// The smallest depth is `0` and always corresponds to the path given
+    /// to the `new` function on this type. Its direct descendents have depth
+    /// `1`, and their descendents have depth `2`, and so on.
+    pub fn min_depth(mut self, depth: usize) -> Self {
+        self.options.min_depth = depth;
+        if self.options.min_depth > self.options.max_depth {
+            self.options.min_depth = self.options.max_depth;
+        }
         self
     }
 
-    /// Maximum depth of entries yielded by the iterator. `0` corresponds to the
-    /// root path of this walk.
+    /// Set the maximum depth of entries yield by the iterator.
+    ///
+    /// The smallest depth is `0` and always corresponds to the path given
+    /// to the `new` function on this type. Its direct descendents have depth
+    /// `1`, and their descendents have depth `2`, and so on.
     ///
     /// A depth < 2 will automatically change `parallelism` to
     /// `Parallelism::Serial`. Parrallelism happens at the `fs::read_dir` level.
     /// It only makes sense to use multiple threads when reading more then one
     /// directory.
+    ///
+    /// Note that this will not simply filter the entries of the iterator, but
+    /// it will actually avoid descending into directories when the depth is
+    /// exceeded.
     pub fn max_depth(mut self, depth: usize) -> Self {
         self.options.max_depth = depth;
-        if depth == 1 {
+        if self.options.max_depth < self.options.min_depth {
+            self.options.max_depth = self.options.min_depth;
+        }
+        if self.options.max_depth < 2 {
             self.options.parallelism = Parallelism::Serial;
         }
         self
@@ -242,14 +268,51 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// sort/filter entries. Use [`entry.read_children_path =
     /// None`](struct.DirEntry.html#field.read_children_path) to yield a
     /// directory entry but skip reading its contents. Use
-    /// [`entry.client_state`](struct.DirEntry.html#field.client_state) to store
-    /// custom state with an entry.
-    pub fn process_entries<F>(mut self, process_by: F) -> Self
+    /// [`entry.client_state`](struct.DirEntry.html#field.client_state)
+    /// to store custom state with an entry.
+    pub fn process_read_dir<F>(mut self, process_by: F) -> Self
     where
-        F: Fn(&mut C, &mut Vec<Result<DirEntry<C>>>) + Send + Sync + 'static,
+        F: Fn(&mut C::ReadDirState, &mut Vec<Result<DirEntry<C>>>) + Send + Sync + 'static,
     {
-        self.options.process_entries = Some(Arc::new(process_by));
+        self.options.process_read_dir = Some(Arc::new(process_by));
         self
+    }
+}
+
+fn process_dir_entry_result<C: ClientState>(
+    dir_entry_result: Result<DirEntry<C>>,
+    follow_links: bool,
+) -> Result<DirEntry<C>> {
+    match dir_entry_result {
+        Ok(mut dir_entry) => {
+            let depth = dir_entry.depth();
+
+            if follow_links && dir_entry.file_type.is_symlink() {
+                dir_entry = match DirEntry::from_path(depth, &dir_entry.path(), true) {
+                    Ok(dir_entry) => dir_entry,
+                    Err(err) => return Err(err),
+                };
+            }
+
+            let is_symlink = dir_entry.file_type.is_symlink();
+
+            if is_symlink && dir_entry.depth == 0 {
+                // As a special case, if we are processing a root entry, then we
+                // always follow it even if it's a symlink and follow_linzks is
+                // false. We are careful to not let this change the semantics of
+                // the DirEntry however. Namely, the DirEntry should still respect
+                // the follow_linzks setting. When it's disabled, it should report
+                // itself as a symlink. When it's enabled, it should always report
+                // itself as the target.
+                let metadata = fs::metadata(dir_entry.path())?;
+                if metadata.file_type().is_dir() {
+                    dir_entry.read_children_path = Some(Arc::new(dir_entry.path()));
+                }
+            }
+
+            Ok(dir_entry)
+        }
+        Err(err) => Err(err),
     }
 }
 
@@ -263,15 +326,15 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
         let parallelism = self.options.parallelism;
         let skip_hidden = self.options.skip_hidden;
         let follow_links = self.options.follow_links;
-        let preload_metadata = self.options.preload_metadata;
-        let process_entries = self.options.process_entries.clone();
-        let root_entry_results = if let Some(process_entries) = process_entries.as_ref() {
-            let mut root_entry_results = vec![DirEntry::from_path(0, &self.root, follow_links)];
-            process_entries(&mut C::default(), &mut root_entry_results);
-            root_entry_results
-        } else {
-            vec![DirEntry::from_path(0, &self.root, follow_links)]
-        };
+        let process_read_dir = self.options.process_read_dir.clone();
+        let mut root_entry_results = vec![process_dir_entry_result(
+            DirEntry::from_path(0, &self.root, false),
+            follow_links,
+        )];
+
+        if let Some(process_read_dir) = process_read_dir.as_ref() {
+            process_read_dir(&mut C::ReadDirState::default(), &mut root_entry_results);
+        }
 
         DirEntryIter::new(
             root_entry_results,
@@ -280,13 +343,13 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                 let ReadDirSpec {
                     depth,
                     path,
-                    mut client_state,
+                    mut client_read_state,
                 } = read_dir_spec;
 
                 let depth = depth + 1;
 
                 if depth > max_depth {
-                    return Ok(ReadDir::new(client_state, Vec::new()));
+                    return Ok(ReadDir::new(client_read_state, Vec::new()));
                 }
 
                 let mut dir_entry_results: Vec<_> = fs::read_dir(path.as_ref())?
@@ -296,20 +359,17 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                             Err(err) => return Some(Err(err)),
                         };
 
-                        let mut dir_entry = match DirEntry::from_entry(depth, path.clone(), &fs_dir_entry) {
-                            Ok(dir_entry) => dir_entry,
-                            Err(err) => return Some(Err(err)),
-                        };
+                        let dir_entry =
+                            match DirEntry::from_entry(depth, path.clone(), &fs_dir_entry) {
+                                Ok(dir_entry) => dir_entry,
+                                Err(err) => return Some(Err(err)),
+                            };
 
                         if skip_hidden && is_hidden(&dir_entry.file_name) {
                             return None;
                         }
 
-                        if preload_metadata {
-                            dir_entry.metadata_result = Some(fs_dir_entry.metadata());
-                        }
-
-                        Some(Ok(dir_entry))
+                        Some(process_dir_entry_result(Ok(dir_entry), follow_links))
                     })
                     .collect();
 
@@ -322,11 +382,11 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                     });
                 }
 
-                if let Some(process_entries) = process_entries.as_ref() {
-                    process_entries(&mut client_state, &mut dir_entry_results);
+                if let Some(process_read_dir) = process_read_dir.as_ref() {
+                    process_read_dir(&mut client_read_state, &mut dir_entry_results);
                 }
 
-                Ok(ReadDir::new(client_state, dir_entry_results))
+                Ok(ReadDir::new(client_read_state, dir_entry_results))
             }),
         )
     }
@@ -336,12 +396,12 @@ impl<C: ClientState> Clone for WalkDirOptions<C> {
     fn clone(&self) -> WalkDirOptions<C> {
         WalkDirOptions {
             sort: false,
+            min_depth: self.min_depth,
             max_depth: self.max_depth,
             skip_hidden: self.skip_hidden,
             follow_links: self.follow_links,
             parallelism: self.parallelism.clone(),
-            preload_metadata: self.preload_metadata,
-            process_entries: self.process_entries.clone(),
+            process_read_dir: self.process_read_dir.clone(),
         }
     }
 }
@@ -374,4 +434,11 @@ fn is_hidden(file_name: &OsStr) -> bool {
         .unwrap_or(false)
 }
 
-impl<T> ClientState for T where T: Clone + Send + Debug + Default + 'static {}
+impl<B, E> ClientState for (B, E)
+where
+    B: Clone + Send + Default + Debug + 'static,
+    E: Send + Default + Debug + 'static,
+{
+    type ReadDirState = B;
+    type DirEntryState = E;
+}
