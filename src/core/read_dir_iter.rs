@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::Result;
 
 /// Client's read dir function.
 pub(crate) type ReadDirCallback<C> =

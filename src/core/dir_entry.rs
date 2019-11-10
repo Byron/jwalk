@@ -1,11 +1,10 @@
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::{self, FileType};
-use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::{ClientState, ReadDirSpec};
+use crate::{ClientState, Error, ReadDirSpec, Result};
 
 /// Representation of a file or directory.
 ///
@@ -46,7 +45,9 @@ impl<C: ClientState> DirEntry<C> {
         parent_path: Arc<PathBuf>,
         fs_dir_entry: &fs::DirEntry,
     ) -> Result<Self> {
-        let file_type = fs_dir_entry.file_type()?;
+        let file_type = fs_dir_entry
+            .file_type()
+            .map_err(|err| Error::from_path(depth, fs_dir_entry.path(), err))?;
         let file_name = fs_dir_entry.file_name();
         let read_children_path = if file_type.is_dir() {
             Some(Arc::new(parent_path.join(&file_name)))
@@ -69,9 +70,10 @@ impl<C: ClientState> DirEntry<C> {
 
     pub(crate) fn from_path(depth: usize, path: &Path, follow_link: bool) -> Result<Self> {
         let metadata = if follow_link {
-            fs::metadata(&path)?
+            fs::metadata(&path).map_err(|err| Error::from_path(depth, path.to_owned(), err))?
         } else {
-            fs::symlink_metadata(&path)?
+            fs::symlink_metadata(&path)
+                .map_err(|err| Error::from_path(depth, path.to_owned(), err))?
         };
 
         let root_name = OsString::from("/");
@@ -92,7 +94,6 @@ impl<C: ClientState> DirEntry<C> {
             read_children_path,
             read_children_error: None,
             client_state: C::DirEntryState::default(),
-            //client_read_state: C::ReadDirState::default(),
         })
     }
 
@@ -174,6 +175,7 @@ impl<C: ClientState> DirEntry<C> {
         } else {
             fs::symlink_metadata(&self.path())
         }
+        .map_err(|err| Error::from_entry(self, err))
     }
 
     /// Reference to the path of the directory containing this entry.

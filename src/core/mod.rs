@@ -11,7 +11,6 @@ mod run_context;
 
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
-use std::io::Result;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::vec;

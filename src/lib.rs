@@ -89,16 +89,17 @@ use std::default::Default;
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs;
-use std::io::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::core::{ReadDir, ReadDirSpec};
 
-pub use crate::core::{DirEntry, DirEntryIter};
+pub use crate::core::{DirEntry, DirEntryIter, Error};
 
 /// Builder for walking a directory.
 pub type WalkDir = WalkDirGeneric<((), ())>;
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Trait defining client stored used when performing walk.
 ///
@@ -304,7 +305,8 @@ fn process_dir_entry_result<C: ClientState>(
                 // the follow_linzks setting. When it's disabled, it should report
                 // itself as a symlink. When it's enabled, it should always report
                 // itself as the target.
-                let metadata = fs::metadata(dir_entry.path())?;
+                let metadata = fs::metadata(dir_entry.path())
+                    .map_err(|err| Error::from_path(0, dir_entry.path(), err))?;
                 if metadata.file_type().is_dir() {
                     dir_entry.read_children_path = Some(Arc::new(dir_entry.path()));
                 }
@@ -352,11 +354,12 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                     return Ok(ReadDir::new(client_read_state, Vec::new()));
                 }
 
-                let mut dir_entry_results: Vec<_> = fs::read_dir(path.as_ref())?
+                let mut dir_entry_results: Vec<_> = fs::read_dir(path.as_ref())
+                    .map_err(|err| Error::from_path(0, path.to_path_buf(), err))?
                     .filter_map(|dir_entry_result| {
                         let fs_dir_entry = match dir_entry_result {
                             Ok(fs_dir_entry) => fs_dir_entry,
-                            Err(err) => return Some(Err(err)),
+                            Err(err) => return Some(Err(Error::from_io(depth, err))),
                         };
 
                         let dir_entry =

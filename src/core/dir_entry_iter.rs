@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 
 use super::*;
+use crate::Result;
 
 /// DirEntry iterator from `WalkDir.into_iter()`.
 ///

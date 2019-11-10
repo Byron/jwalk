@@ -1,7 +1,7 @@
 use std::env;
 use std::error;
 use std::fs::{self, File};
-use std::io::{self, Error};
+use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::result;
 

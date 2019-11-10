@@ -1,6 +1,5 @@
-use std::io::Result;
-
 use super::{ClientState, DirEntry, IndexPath, Ordered, ReadDirSpec};
+use crate::Result;
 
 /// Results of successfully reading a directory.
 #[derive(Debug)]

@@ -3,7 +3,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
-use jwalk::{Parallelism, WalkDir, WalkDirGeneric};
+use jwalk::{Error, Parallelism, WalkDir, WalkDirGeneric};
 use num_cpus;
 use std::cmp;
 use std::fs::Metadata;
@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc;
 use walkdir;
-use std::io::Error;
 
 fn linux_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/assets/linux_checkout")
@@ -43,20 +42,18 @@ fn walk_benches(c: &mut Criterion) {
     });
 
     c.bench_function("jwalk (sorted, metadata, n threads)", |b| {
-        b.iter(
-            || {
-                for _ in WalkDirGeneric::<((), (Option<Result<Metadata, Error>>))>::new(linux_dir())
-                    .sort(true)
-                    .process_read_dir(|_, dir_entry_results| {
-                        dir_entry_results.iter_mut().for_each(|dir_entry_result| {
-                            if let Ok(dir_entry) = dir_entry_result {
-                                dir_entry.client_state = Some(dir_entry.metadata());                            
-                            }
-                        })
+        b.iter(|| {
+            for _ in WalkDirGeneric::<((), (Option<Result<Metadata, Error>>))>::new(linux_dir())
+                .sort(true)
+                .process_read_dir(|_, dir_entry_results| {
+                    dir_entry_results.iter_mut().for_each(|dir_entry_result| {
+                        if let Ok(dir_entry) = dir_entry_result {
+                            dir_entry.client_state = Some(dir_entry.metadata());
+                        }
                     })
-                {}
-            },
-        )
+                })
+            {}
+        })
     });
 
     c.bench_function("jwalk (sorted, n threads, first 100)", |b| {
@@ -92,7 +89,7 @@ fn walk_benches(c: &mut Criterion) {
                 .process_read_dir(|_, dir_entry_results| {
                     dir_entry_results.iter_mut().for_each(|dir_entry_result| {
                         if let Ok(dir_entry) = dir_entry_result {
-                            dir_entry.client_state = Some(dir_entry.metadata());                            
+                            dir_entry.client_state = Some(dir_entry.metadata());
                         }
                     })
                 })
