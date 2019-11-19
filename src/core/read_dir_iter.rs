@@ -55,15 +55,19 @@ impl<C: ClientState> ReadDirIter<C> {
                     core_read_dir_callback,
                 };
 
-                read_dir_spec_iter.par_bridge().for_each_with(
-                    run_context,
-                    |run_context, ordered_read_dir_spec| {
-                        multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
-                    },
-                );
+                parallelism.install(move || {
+                    rayon::spawn(|| {
+                        read_dir_spec_iter.jwalk_par_iter_bridge().for_each_with(
+                            run_context,
+                            |run_context, ordered_read_dir_spec| {
+                                multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
+                            },
+                        );
+                    });
+                });
             };
 
-            parallelism.spawn(walk_closure);
+            std::thread::spawn(walk_closure);
 
             ReadDirIter::ParWalk {
                 read_dir_result_iter,

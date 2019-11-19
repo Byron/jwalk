@@ -191,7 +191,7 @@ impl<C: ClientState> DirEntry<C> {
             |children_path| ReadDirSpec {
                 depth: self.depth,
                 path: children_path.clone(),
-                client_read_state: client_read_state,
+                client_read_state,
             }
         })
     }

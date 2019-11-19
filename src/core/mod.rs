@@ -8,8 +8,8 @@ mod read_dir;
 mod read_dir_iter;
 mod read_dir_spec;
 mod run_context;
+mod jwalk_par_iter_bridge;
 
-use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -26,5 +26,6 @@ pub use dir_entry_iter::DirEntryIter;
 pub use error::Error;
 pub use read_dir::ReadDir;
 pub use read_dir_spec::ReadDirSpec;
+pub use self::jwalk_par_iter_bridge::{JWalkIterBridge, JWalkParallelBridge};
 
 use crate::{ClientState, Parallelism};

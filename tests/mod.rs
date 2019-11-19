@@ -238,54 +238,6 @@ fn nested() {
     assert_eq!(expected, r.paths());
 }
 
-/*
-#[test]
-fn nested_small_max_open() {
-    let nested = PathBuf::from(
-        "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z",
-    );
-    let dir = Dir::tmp();
-    dir.mkdirp(&nested);
-    dir.touch(nested.join("A"));
-
-    let wd = WalkDir::new(dir.path()).max_open(1);
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.path().to_path_buf(),
-        dir.join("a"),
-        dir.join("a/b"),
-        dir.join("a/b/c"),
-        dir.join("a/b/c/d"),
-        dir.join("a/b/c/d/e"),
-        dir.join("a/b/c/d/e/f"),
-        dir.join("a/b/c/d/e/f/g"),
-        dir.join("a/b/c/d/e/f/g/h"),
-        dir.join("a/b/c/d/e/f/g/h/i"),
-        dir.join("a/b/c/d/e/f/g/h/i/j"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y"),
-        dir.join("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z"),
-        dir.join(&nested).join("A"),
-    ];
-    assert_eq!(expected, r.paths());
-}
-*/
-
 #[test]
 fn siblings() {
     let dir = Dir::tmp();
@@ -705,13 +657,14 @@ fn sym_dir_self_loop_io_error() {
     assert!(err.loop_ancestor().is_none());
     assert!(err.io_error().is_some());
 }
+*/
 
 #[test]
 fn min_depth_1() {
     let dir = Dir::tmp();
     dir.mkdirp("a/b");
 
-    let wd = WalkDir::new(dir.path()).min_depth(1);
+    let wd = WalkDir::new(dir.path()).min_depth(1).sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
@@ -719,7 +672,7 @@ fn min_depth_1() {
         dir.join("a"),
         dir.join("a").join("b"),
     ];
-    assert_eq!(expected, r.sorted_paths());
+    assert_eq!(expected, r.paths());
 }
 
 #[test]
@@ -727,16 +680,15 @@ fn min_depth_2() {
     let dir = Dir::tmp();
     dir.mkdirp("a/b");
 
-    let wd = WalkDir::new(dir.path()).min_depth(2);
+    let wd = WalkDir::new(dir.path()).min_depth(2).sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
     let expected = vec![
         dir.join("a").join("b"),
     ];
-    assert_eq!(expected, r.sorted_paths());
+    assert_eq!(expected, r.paths());
 }
-*/
 
 #[test]
 fn max_depth_0() {
@@ -797,20 +749,21 @@ fn min_max_depth_diff_nada() {
     ];
     assert_eq!(expected, r.sorted_paths());
 }
+*/
 
 #[test]
 fn min_max_depth_diff_0() {
     let dir = Dir::tmp();
     dir.mkdirp("a/b/c");
 
-    let wd = WalkDir::new(dir.path()).min_depth(2).max_depth(2);
+    let wd = WalkDir::new(dir.path()).min_depth(2).max_depth(2).sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
     let expected = vec![
         dir.join("a").join("b"),
     ];
-    assert_eq!(expected, r.sorted_paths());
+    assert_eq!(expected, r.paths());
 }
 
 #[test]
@@ -818,7 +771,7 @@ fn min_max_depth_diff_1() {
     let dir = Dir::tmp();
     dir.mkdirp("a/b/c");
 
-    let wd = WalkDir::new(dir.path()).min_depth(1).max_depth(2);
+    let wd = WalkDir::new(dir.path()).min_depth(1).max_depth(2).sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
@@ -826,9 +779,10 @@ fn min_max_depth_diff_1() {
         dir.join("a"),
         dir.join("a").join("b"),
     ];
-    assert_eq!(expected, r.sorted_paths());
+    assert_eq!(expected, r.paths());
 }
 
+/*
 #[test]
 fn contents_first() {
     let dir = Dir::tmp();
@@ -893,51 +847,28 @@ fn filter_entry() {
 }
 */
 
-/*
 #[test]
 fn sort() {
     let dir = Dir::tmp();
     dir.mkdirp("foo/bar/baz/abc");
     dir.mkdirp("quux");
 
-    let wd = WalkDir::new(dir.path())
-        .sort_by(|a,b| a.file_name().cmp(b.file_name()).reverse());
+    let wd = WalkDir::new(dir.path()).sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
     let expected = vec![
         dir.path().to_path_buf(),
-        dir.join("quux"),
         dir.join("foo"),
         dir.join("foo").join("bar"),
         dir.join("foo").join("bar").join("baz"),
         dir.join("foo").join("bar").join("baz").join("abc"),
-    ];
-    assert_eq!(expected, r.paths());
-}
-
-#[test]
-fn sort_max_open() {
-    let dir = Dir::tmp();
-    dir.mkdirp("foo/bar/baz/abc");
-    dir.mkdirp("quux");
-
-    let wd = WalkDir::new(dir.path())
-        .max_open(1)
-        .sort_by(|a,b| a.file_name().cmp(b.file_name()).reverse());
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.path().to_path_buf(),
         dir.join("quux"),
-        dir.join("foo"),
-        dir.join("foo").join("bar"),
-        dir.join("foo").join("bar").join("baz"),
-        dir.join("foo").join("bar").join("baz").join("abc"),
     ];
     assert_eq!(expected, r.paths());
 }
+
+/*
 
 #[cfg(target_os = "linux")]
 #[test]
@@ -1097,36 +1028,28 @@ fn walk_rayon_global() {
 }
 
 #[test]
+fn walk_rayon_no_lockup() {
+    let pool = std::sync::Arc::new(rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap());
+    let _:Vec<_> = WalkDir::new("/Users/jessegrosjean/Documents/github/Workspace/Workspace/Workspace.rs2/tests/assets/linux_checkout")
+        .parallelism(Parallelism::RayonExistingPool(pool))
+        .process_read_dir(|_, dir_entry_results| {
+            for dir_entry_result in dir_entry_results {
+                let _ = dir_entry_result.as_ref().map(|dir_entry| {
+                    dir_entry.metadata()
+                });
+            }
+        })
+        .sort(true)
+        .into_iter()
+        .collect();
+}
+
+#[test]
 fn see_hidden_files() {
     let (test_dir, _temp_dir) = test_dir();
     let paths = local_paths(WalkDir::new(test_dir).skip_hidden(false).sort(true));
     assert!(paths.contains(&"group 2/.hidden_file.txt (2)".to_string()));
 }
-
-/*
-#[test]
-fn max_depth_0() {
-    let (test_dir, _temp_dir) = test_dir();
-    let paths = local_paths(WalkDir::new(test_dir).max_depth(0).sort(true));
-    assert!(paths == vec![" (0)",]);
-}
-
-#[test]
-fn max_depth_1() {
-    let (test_dir, _temp_dir) = test_dir();
-    let paths = local_paths(WalkDir::new(test_dir).max_depth(1).sort(true));
-    assert!(
-        paths
-            == vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 2 (1)",
-            ]
-    );
-}*/
 
 #[test]
 fn walk_file() {

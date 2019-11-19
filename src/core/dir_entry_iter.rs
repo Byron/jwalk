@@ -7,6 +7,7 @@ use crate::Result;
 ///
 /// Yeilds entries from recursive traversal of filesystem.
 pub struct DirEntryIter<C: ClientState> {
+    min_depth: usize,
     // iterator yeilding next ReadDir results when needed
     read_dir_iter: Peekable<ReadDirIter<C>>,
     // stack of ReadDir results, track location in filesystem traversal
@@ -17,6 +18,7 @@ impl<C: ClientState> DirEntryIter<C> {
     pub(crate) fn new(
         root_entry_results: Vec<Result<DirEntry<C>>>,
         parallelism: Parallelism,
+        min_depth: usize,
         core_read_dir_callback: Arc<ReadDirCallback<C>>,
     ) -> DirEntryIter<C> {
         // 1. Gather read_dir_specs from root level
@@ -36,6 +38,7 @@ impl<C: ClientState> DirEntryIter<C> {
         // 3. Return DirEntryIter that will return initial root entries and then
         //    fill and process read_dir_iter until complete
         DirEntryIter {
+            min_depth,
             read_dir_iter: read_dir_iter.peekable(),
             read_dir_results_stack: vec![root_entry_results.into_iter()],
         }
@@ -82,8 +85,11 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
                         dir_entry.read_children_error = Some(err);
                     }
                 }
-                // 2.3 Finished, return dir_entry
-                return Some(Ok(dir_entry));
+
+                if dir_entry.depth >= self.min_depth {
+                    // 2.3 Finished, return dir_entry
+                    return Some(Ok(dir_entry));
+                }
             } else {
                 // If no more results in current then pop stack
                 self.read_dir_results_stack.pop();

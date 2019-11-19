@@ -129,11 +129,10 @@ pub struct WalkDirGeneric<C: ClientState> {
     options: WalkDirOptions<C>,
 }
 
-type ProcessReadDirFunction<C> =
-    dyn Fn(&mut <C as ClientState>::ReadDirState, &mut Vec<Result<DirEntry<C>>>)
-        + Send
-        + Sync
-        + 'static;
+type ProcessReadDirFunction<C> = dyn Fn(&mut <C as ClientState>::ReadDirState, &mut Vec<Result<DirEntry<C>>>)
+    + Send
+    + Sync
+    + 'static;
 
 /// Degree of parallelism to use when performing walk.
 ///
@@ -325,6 +324,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
     fn into_iter(self) -> DirEntryIter<C> {
         let sort = self.options.sort;
         let max_depth = self.options.max_depth;
+        let min_depth = self.options.min_depth;
         let parallelism = self.options.parallelism;
         let skip_hidden = self.options.skip_hidden;
         let follow_links = self.options.follow_links;
@@ -341,6 +341,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
         DirEntryIter::new(
             root_entry_results,
             parallelism,
+            min_depth,
             Arc::new(move |read_dir_spec| {
                 let ReadDirSpec {
                     depth,
@@ -410,7 +411,7 @@ impl<C: ClientState> Clone for WalkDirOptions<C> {
 }
 
 impl Parallelism {
-    pub(crate) fn spawn<OP>(&self, op: OP)
+    pub(crate) fn install<OP>(&self, op: OP)
     where
         OP: FnOnce() -> () + Send + 'static,
     {
@@ -420,12 +421,12 @@ impl Parallelism {
             Parallelism::RayonNewPool(num_threads) => {
                 if let Ok(thread_pool) = ThreadPoolBuilder::new().num_threads(*num_threads).build()
                 {
-                    thread_pool.spawn(op);
+                    thread_pool.install(op);
                 } else {
                     rayon::spawn(op);
                 }
             }
-            Parallelism::RayonExistingPool(thread_pool) => thread_pool.spawn(op),
+            Parallelism::RayonExistingPool(thread_pool) => thread_pool.install(op),
         }
     }
 }
