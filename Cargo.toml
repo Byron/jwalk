@@ -20,7 +20,7 @@ rayon = "1.0.3"
 crossbeam = "0.7.1"
 
 [dev-dependencies]
-criterion = "0.2.11"
+criterion = "0.3"
 fs_extra = "1.1.0"
 walkdir = "2.2.8"
 ignore = "0.4.7"
