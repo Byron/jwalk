@@ -1,10 +1,28 @@
 use std::ffi::OsString;
 use std::fs::{self, FileType, Metadata};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+
 use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{ClientState, ReadDirSpec};
+
+#[derive(Debug)]
+#[cfg(unix)]
+pub struct DirEntryExt {
+    pub mode: u32,
+    pub ino: u64,
+    pub dev: u64,
+    pub nlink: u64,
+    pub uid: u32,
+    pub gid: u32,
+    pub size: u64,
+    pub rdev: u64,
+    pub blksize: u64,
+    pub blocks: u64,
+}
 
 /// Representation of a file or directory.
 ///
@@ -42,9 +60,12 @@ pub struct DirEntry<C: ClientState> {
     /// If `read_children_path` is set and resulting `fs::read_dir` generates an error
     /// then that error is stored here.
     pub read_children_error: Option<Error>,
+    pub ext: Option<Result<DirEntryExt>>,
 }
 
 impl<C: ClientState> DirEntry<C> {
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         depth: usize,
         file_name: OsString,
@@ -53,6 +74,8 @@ impl<C: ClientState> DirEntry<C> {
         parent_path: Arc<PathBuf>,
         read_children_path: Option<Arc<PathBuf>>,
         client_state: C,
+        #[cfg(unix)]
+        ext: Option<Result<DirEntryExt>>,
     ) -> DirEntry<C> {
         DirEntry {
             depth,
@@ -63,7 +86,9 @@ impl<C: ClientState> DirEntry<C> {
             read_children_path,
             read_children_error: None,
             client_state,
-        }
+            #[cfg(unix)]
+            ext,
+            }
     }
 
     pub(crate) fn new_root_with_path(path: &Path) -> Result<DirEntry<C>> {
@@ -76,7 +101,17 @@ impl<C: ClientState> DirEntry<C> {
         } else {
             None
         };
-
+        #[cfg(unix)]
+        let ext = DirEntryExt { mode: metadata.mode(),
+                                ino: metadata.ino(),
+                                dev: metadata.dev(),
+                                nlink: metadata.nlink(),
+                                uid: metadata.uid(),
+                                gid: metadata.gid(),
+                                size: metadata.size(),
+                                rdev: metadata.rdev(),
+                                blksize: metadata.blksize(),
+                                blocks: metadata.blocks() };
         Ok(DirEntry::new(
             0,
             file_name.to_owned(),
@@ -85,6 +120,8 @@ impl<C: ClientState> DirEntry<C> {
             parent_path,
             read_children_path,
             C::default(),
+            #[cfg(unix)]
+            Some(Ok(ext)),
         ))
     }
 

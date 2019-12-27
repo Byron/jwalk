@@ -22,6 +22,7 @@ use read_dir_iter::*;
 use run_context::*;
 
 pub use dir_entry::DirEntry;
+pub use dir_entry::DirEntryExt;
 pub use dir_entry_iter::DirEntryIter;
 pub use read_dir::ReadDir;
 pub use read_dir_spec::ReadDirSpec;

@@ -89,13 +89,14 @@ use std::default::Default;
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::io::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::core::{ReadDir, ReadDirSpec};
 
-pub use crate::core::{DirEntry, DirEntryIter};
+pub use crate::core::{DirEntry, DirEntryExt, DirEntryIter};
 
 /// Builder for walking a directory.
 pub type WalkDir = WalkDirGeneric<()>;
@@ -149,6 +150,7 @@ struct WalkDirOptions<C: ClientState> {
     skip_hidden: bool,
     parallelism: Parallelism,
     preload_metadata: bool,
+    preload_metadata_ext: bool,
     process_entries: Option<Arc<ProcessEntriesFunction<C>>>,
 }
 
@@ -166,6 +168,7 @@ impl<C: ClientState> WalkDirGeneric<C> {
                 parallelism: Parallelism::RayonDefaultPool,
                 skip_hidden: true,
                 preload_metadata: false,
+                preload_metadata_ext: false,
                 process_entries: None,
             },
         }
@@ -194,6 +197,11 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// metadata is loaded in rayon's thread pool.
     pub fn preload_metadata(mut self, preload_metadata: bool) -> Self {
         self.options.preload_metadata = preload_metadata;
+        self
+    }
+
+    pub fn preload_metadata_ext(mut self, preload_metadata_ext: bool) -> Self {
+        self.options.preload_metadata_ext = preload_metadata_ext;
         self
     }
 
@@ -245,6 +253,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
         let skip_hidden = self.options.skip_hidden;
         let max_depth = self.options.max_depth;
         let preload_metadata = self.options.preload_metadata;
+        let preload_metadata_ext = self.options.preload_metadata_ext;
         let process_entries = self.options.process_entries.clone();
         let root_entry_results = if let Some(process_entries) = process_entries.as_ref() {
             let mut root_entry_results = vec![DirEntry::new_root_with_path(&self.root)];
@@ -283,7 +292,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                         }
 
                         let file_type = dir_entry.file_type();
-                        let metadata = if preload_metadata {
+                        let metadata = if preload_metadata || preload_metadata_ext {
                             Some(dir_entry.metadata())
                         } else {
                             None
@@ -299,7 +308,22 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                             }
                             Err(_) => None,
                         };
-
+                        #[cfg(unix)]
+                        let ext = if preload_metadata_ext {
+                            let metadata_ext = metadata.as_ref().unwrap().as_ref().unwrap();
+                            Some(Ok(DirEntryExt { mode: metadata_ext.mode(),
+                                                  ino: metadata_ext.ino(),
+                                                  dev: metadata_ext.dev(),
+                                                  nlink: metadata_ext.nlink(),
+                                                  uid: metadata_ext.uid(),
+                                                  gid: metadata_ext.gid(),
+                                                  size: metadata_ext.size(),
+                                                  rdev: metadata_ext.rdev(),
+                                                  blksize: metadata_ext.blksize(),
+                                                  blocks: metadata_ext.blocks() }))
+                        } else {
+                            None
+                        };
                         Some(Ok(DirEntry::new(
                             depth,
                             file_name,
@@ -308,6 +332,8 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                             path.clone(),
                             read_children_path,
                             C::default(),
+                            #[cfg(unix)]
+                            ext,
                         )))
                     })
                     .collect();
@@ -339,6 +365,7 @@ impl<C: ClientState> Clone for WalkDirOptions<C> {
             parallelism: self.parallelism.clone(),
             skip_hidden: self.skip_hidden,
             preload_metadata: self.preload_metadata,
+            preload_metadata_ext: self.preload_metadata_ext,
             process_entries: self.process_entries.clone(),
         }
     }
