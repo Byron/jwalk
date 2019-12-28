@@ -1,4 +1,5 @@
 #![warn(clippy::all)]
+#![cfg_attr(windows, feature(windows_by_handle))]
 
 //! Filesystem walk.
 //!
@@ -89,14 +90,19 @@ use std::default::Default;
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs;
-use std::os::unix::fs::MetadataExt;
 use std::io::Result;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::core::{ReadDir, ReadDirSpec};
 
-pub use crate::core::{DirEntry, DirEntryExt, DirEntryIter};
+#[cfg(any(unix, windows))]
+pub use crate::core::DirEntryExt;
+pub use crate::core::{DirEntry, DirEntryIter};
 
 /// Builder for walking a directory.
 pub type WalkDir = WalkDirGeneric<()>;
@@ -311,16 +317,31 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                         #[cfg(unix)]
                         let ext = if preload_metadata_ext {
                             let metadata_ext = metadata.as_ref().unwrap().as_ref().unwrap();
-                            Some(Ok(DirEntryExt { mode: metadata_ext.mode(),
-                                                  ino: metadata_ext.ino(),
-                                                  dev: metadata_ext.dev(),
-                                                  nlink: metadata_ext.nlink(),
-                                                  uid: metadata_ext.uid(),
-                                                  gid: metadata_ext.gid(),
-                                                  size: metadata_ext.size(),
-                                                  rdev: metadata_ext.rdev(),
-                                                  blksize: metadata_ext.blksize(),
-                                                  blocks: metadata_ext.blocks() }))
+                            Some(Ok(DirEntryExt {
+                                mode: metadata_ext.mode(),
+                                ino: metadata_ext.ino(),
+                                dev: metadata_ext.dev(),
+                                nlink: metadata_ext.nlink() as u32,
+                                uid: metadata_ext.uid(),
+                                gid: metadata_ext.gid(),
+                                size: metadata_ext.size(),
+                                rdev: metadata_ext.rdev(),
+                                blksize: metadata_ext.blksize(),
+                                blocks: metadata_ext.blocks(),
+                            }))
+                        } else {
+                            None
+                        };
+                        #[cfg(windows)]
+                        let ext = if preload_metadata_ext {
+                            let metadata_ext = metadata.as_ref().unwrap().as_ref().unwrap();
+                            Some(Ok(DirEntryExt {
+                                mode: metadata_ext.file_attributes(),
+                                ino: metadata_ext.file_index().unwrap_or(0),
+                                dev: metadata_ext.volume_serial_number().unwrap_or(0),
+                                nlink: metadata_ext.number_of_links().unwrap_or(0),
+                                size: metadata_ext.file_size(),
+                            }))
                         } else {
                             None
                         };
@@ -332,7 +353,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                             path.clone(),
                             read_children_path,
                             C::default(),
-                            #[cfg(unix)]
+                            #[cfg(any(unix, windows))]
                             ext,
                         )))
                     })
