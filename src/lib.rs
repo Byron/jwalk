@@ -82,7 +82,7 @@
 //! # }
 //! ```
 
-mod core;
+pub mod core;
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::cmp::Ordering;
