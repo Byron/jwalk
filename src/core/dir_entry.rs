@@ -128,9 +128,9 @@ impl<C: ClientState> DirEntry<C> {
         #[cfg(windows)]
         let ext = DirEntryExt {
             mode: metadata.file_attributes(),
-            ino: 0,   //metadata.file_index().unwrap_or(0),
-            dev: 0,   //metadata.volume_serial_number().unwrap_or(0),
-            nlink: 0, //metadata.number_of_links().unwrap_or(0),
+            ino: metadata.file_index().unwrap_or(0),
+            dev: metadata.volume_serial_number().unwrap_or(0),
+            nlink: metadata.number_of_links().unwrap_or(0),
             size: metadata.file_size(),
         };
         Ok(DirEntry::new(
