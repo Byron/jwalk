@@ -334,7 +334,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                         };
                         #[cfg(windows)]
                         let ext = if preload_metadata_ext {
-                            let metadata_ext = metadata.as_ref().unwrap().as_ref().unwrap();
+                            let metadata_ext = fs::metadata(path.as_ref()).unwrap();
                             Some(Ok(DirEntryExt {
                                 mode: metadata_ext.file_attributes(),
                                 ino: metadata_ext.file_index().unwrap_or(0),
