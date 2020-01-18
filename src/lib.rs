@@ -334,14 +334,18 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                         };
                         #[cfg(windows)]
                         let ext = if preload_metadata_ext {
-                            let metadata_ext = fs::metadata(path.as_ref()).unwrap();
-                            Some(Ok(DirEntryExt {
-                                mode: metadata_ext.file_attributes(),
-                                ino: metadata_ext.file_index().unwrap_or(0),
-                                dev: metadata_ext.volume_serial_number().unwrap_or(0),
-                                nlink: metadata_ext.number_of_links().unwrap_or(0),
-                                size: metadata_ext.file_size(),
-                            }))
+                            match fs::metadata(path.as_ref().join(&file_name)) {
+                                Ok(metadata_ext) => {
+                                    Some(Ok(DirEntryExt {
+                                        mode: metadata_ext.file_attributes(),
+                                        ino: metadata_ext.file_index().unwrap_or(0),
+                                        dev: metadata_ext.volume_serial_number().unwrap_or(0),
+                                        nlink: metadata_ext.number_of_links().unwrap_or(0),
+                                        size: metadata_ext.file_size(),
+                                    }))
+                                },
+                                Err(err) => return Some(Err(err)),
+                            }
                         } else {
                             None
                         };
