@@ -307,7 +307,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
                         let read_children_path = match file_type {
                             Ok(file_type) => {
                                 if file_type.is_dir() && depth < max_depth {
-                                    Some(Arc::new(path.as_ref().join(dir_entry.file_name())))
+                                    Some(Arc::new(path.as_ref().join(&file_name)))
                                 } else {
                                     None
                                 }
