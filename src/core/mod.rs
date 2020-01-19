@@ -1,4 +1,4 @@
-mod dir_entry;
+pub mod dir_entry;
 mod dir_entry_iter;
 mod index_path;
 mod ordered;
