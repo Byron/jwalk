@@ -43,7 +43,7 @@ fn walk_benches(c: &mut Criterion) {
 
     c.bench_function("jwalk (sorted, metadata, n threads)", |b| {
         b.iter(|| {
-            for _ in WalkDirGeneric::<((), (Option<Result<Metadata, Error>>))>::new(linux_dir())
+            for _ in WalkDirGeneric::<((), Option<Result<Metadata, Error>>)>::new(linux_dir())
                 .sort(true)
                 .process_read_dir(|_, dir_entry_results| {
                     dir_entry_results.iter_mut().for_each(|dir_entry_result| {

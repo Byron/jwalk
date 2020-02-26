@@ -37,6 +37,7 @@ enum ErrorInner {
         path: Option<PathBuf>,
         err: io::Error,
     },
+    #[allow(dead_code)]
     Loop {
         ancestor: PathBuf,
         child: PathBuf,
@@ -199,6 +200,7 @@ impl Error {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_loop(depth: usize, ancestor: &Path, child: &Path) -> Self {
         Error {
             depth: depth,
@@ -211,13 +213,6 @@ impl Error {
 }
 
 impl error::Error for Error {
-    fn description(&self) -> &str {
-        match self.inner {
-            ErrorInner::Io { ref err, .. } => err.description(),
-            ErrorInner::Loop { .. } => "file system loop found",
-        }
-    }
-
     fn cause(&self) -> Option<&dyn error::Error> {
         match self.inner {
             ErrorInner::Io { ref err, .. } => Some(err),
