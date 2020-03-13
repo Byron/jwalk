@@ -1,8 +1,8 @@
-use std::io::Result;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
 use super::{ClientState, Ordered, OrderedQueue, ReadDir, ReadDirCallback, ReadDirSpec};
+use crate::Result;
 
 pub(crate) struct RunContext<C: ClientState> {
     pub(crate) stop: Arc<AtomicBool>,

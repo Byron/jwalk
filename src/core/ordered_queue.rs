@@ -104,31 +104,29 @@ where
         self.stop.load(AtomicOrdering::SeqCst)
     }
 
-    fn next_relaxed(&mut self) -> Option<Ordered<T>> {
-        loop {
-            if self.is_stop() {
-                return None;
-            }
+    fn try_next_relaxed(&mut self) -> Result<Ordered<T>, TryRecvError> {
+        if self.is_stop() {
+            return Err(TryRecvError::Disconnected);
+        }
 
-            while let Ok(ordered_work) = self.receiver.try_recv() {
-                self.receive_buffer.push(ordered_work)
-            }
+        while let Ok(ordered_work) = self.receiver.try_recv() {
+            self.receive_buffer.push(ordered_work)
+        }
 
-            if let Some(ordered_work) = self.receive_buffer.pop() {
-                return Some(ordered_work);
-            } else if self.pending_count() == 0 {
-                return None;
-            } else {
-                thread::yield_now();
-            }
+        if let Some(ordered_work) = self.receive_buffer.pop() {
+            Ok(ordered_work)
+        } else if self.pending_count() == 0 {
+            Err(TryRecvError::Disconnected)
+        } else {
+            Err(TryRecvError::Empty)
         }
     }
 
-    fn next_strict(&mut self) -> Option<Ordered<T>> {
+    fn try_next_strict(&mut self) -> Result<Ordered<T>, TryRecvError> {
         let looking_for = &self.ordered_matcher.looking_for;
         loop {
             if self.is_stop() {
-                return None;
+                return Err(TryRecvError::Disconnected);
             }
 
             let top_ordered = self.receive_buffer.peek();
@@ -139,7 +137,7 @@ where
             }
 
             if self.ordered_matcher.is_none() {
-                return None;
+                return Err(TryRecvError::Disconnected);
             }
 
             match self.receiver.try_recv() {
@@ -148,14 +146,14 @@ where
                 }
                 Err(err) => match err {
                     TryRecvError::Empty => thread::yield_now(),
-                    TryRecvError::Disconnected => break
+                    TryRecvError::Disconnected => break,
                 },
             }
         }
 
-        let ordered = self.receive_buffer.pop()?;
+        let ordered = self.receive_buffer.pop().unwrap();
         self.ordered_matcher.advance_past(&ordered);
-        Some(ordered)
+        Ok(ordered)
     }
 }
 
@@ -165,9 +163,20 @@ where
 {
     type Item = Ordered<T>;
     fn next(&mut self) -> Option<Ordered<T>> {
-        match self.ordering {
-            Ordering::Relaxed => self.next_relaxed(),
-            Ordering::Strict => self.next_strict(),
+        loop {
+            let try_next = match self.ordering {
+                Ordering::Relaxed => self.try_next_relaxed(),
+                Ordering::Strict => self.try_next_strict(),
+            };
+            match try_next {
+                Ok(next) => {
+                    return Some(next);
+                }
+                Err(err) => match err {
+                    TryRecvError::Empty => thread::yield_now(),
+                    TryRecvError::Disconnected => return None,
+                },
+            }
         }
     }
 }

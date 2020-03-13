@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jwalk = "0.3"
+jwalk = "0.5"
 ```
 
 Lean More: [docs.rs/jwalk](https://docs.rs/jwalk)
@@ -37,13 +37,14 @@ for entry in WalkDir::new("foo").sort(true) {
 
 This crate is inspired by both [`walkdir`](https://crates.io/crates/walkdir) and
 [`ignore`](https://crates.io/crates/ignore). It attempts to combine the
-parallelism of `ignore` with `walkdir`'s streaming iterator API.
+parallelism of `ignore` with `walkdir`'s streaming iterator API. Some code and
+comments are copied directly from `walkdir`.
 
 ### Why use this crate?
 
 This crate is particularly fast when you want streamed sorted results. In my
 tests its about 4x `walkdir` speed for sorted results with metadata. Also this
-crate's `process_entries` callback allows you to arbitrarily
+crate's `process_read_dir` callback allows you to arbitrarily
 sort/filter/skip/state entries before they are yielded.
 
 ### Why not use this crate?
@@ -51,6 +52,10 @@ sort/filter/skip/state entries before they are yielded.
 Directory traversal is already pretty fast. If you don't need this crate's speed
 then `walkdir` provides a smaller and more tested single threaded
 implementation.
+
+This crates parallelism happens at the directory level. It will help when
+walking deep file systems with many directories. It wont help when reading a
+single directory with many files.
 
 ### Benchmarks
 
