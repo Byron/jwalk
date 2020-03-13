@@ -575,7 +575,6 @@ fn sym_loop_detect() {
     let r = dir.run_recursive(wd);
 
     let (ents, errs) = (r.ents(), r.errs());
-    println!("{}", errs[0]);
     assert_eq!(4, ents.len());
     assert_eq!(1, errs.len());
 
@@ -1119,6 +1118,11 @@ fn walk_root() {
         .filter_map(|each| Some(each.ok()?.path()))
         .collect();
     assert!(paths.first().unwrap().to_str().unwrap() == "/");
+}
+
+#[test]
+fn walk_relative_yields() {
+    assert_eq!(&WalkDir::new(".").into_iter().next().unwrap().unwrap().file_name, ".");
 }
 
 #[test]

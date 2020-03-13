@@ -320,20 +320,14 @@ fn process_dir_entry_result<C: ClientState>(
                 dir_entry = dir_entry.follow_symlink()?;
             }
 
-            let is_symlink = dir_entry.file_type.is_symlink();
-
-            if is_symlink && dir_entry.file_type.is_dir() {
-                // check for loop
-            }
-
-            if is_symlink && dir_entry.depth == 0 {
+            if dir_entry.depth == 0 && dir_entry.file_type.is_symlink() {
                 // As a special case, if we are processing a root entry, then we
                 // always follow it even if it's a symlink and follow_linzks is
                 // false. We are careful to not let this change the semantics of
-                // the DirEntry however. Namely, the DirEntry should still respect
-                // the follow_linzks setting. When it's disabled, it should report
-                // itself as a symlink. When it's enabled, it should always report
-                // itself as the target.
+                // the DirEntry however. Namely, the DirEntry should still
+                // respect the follow_links setting. When it's disabled, it
+                // should report itself as a symlink. When it's enabled, it
+                // should always report itself as the target.
                 let metadata = fs::metadata(dir_entry.path())
                     .map_err(|err| Error::from_path(0, dir_entry.path(), err))?;
                 if metadata.file_type().is_dir() {

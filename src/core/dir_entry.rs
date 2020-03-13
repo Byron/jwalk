@@ -85,10 +85,10 @@ impl<C: ClientState> DirEntry<C> {
                 .map_err(|err| Error::from_path(depth, path.to_owned(), err))?
         };
 
-        let root_name = OsString::from("/");
-        let file_name = path.file_name().unwrap_or(&root_name);
-        let parent_path: Arc<Path> =
-            Arc::from(path.parent().map(Path::to_path_buf).unwrap_or_default());
+        let root_name = path.file_name().unwrap_or_else(|| {
+            path.as_os_str()
+        });
+
         let read_children_path: Option<Arc<Path>> = if metadata.file_type().is_dir() {
             Some(Arc::from(path))
         } else {
@@ -97,9 +97,9 @@ impl<C: ClientState> DirEntry<C> {
 
         Ok(DirEntry {
             depth,
-            file_name: file_name.to_owned(),
+            file_name: root_name.to_owned(),
             file_type: metadata.file_type(),
-            parent_path,
+            parent_path: Arc::from(path.parent().map(Path::to_path_buf).unwrap_or_default()),
             read_children_path,
             read_children_error: None,
             client_state: C::DirEntryState::default(),
