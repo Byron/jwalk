@@ -22,10 +22,10 @@ crossbeam = "0.7"
 [dev-dependencies]
 criterion = "0.3"
 fs_extra = "1.1"
-walkdir = "2.2"
+walkdir = "2.3"
 ignore = "0.4"
-tempfile = "3.0"
-num_cpus = "1.10"
+tempfile = "3.1"
+num_cpus = "1.12"
 
 [[bench]]
 name = "walk_benchmark"
