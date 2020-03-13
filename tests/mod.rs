@@ -1,5 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
+use std::env;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
 
 mod util;
 
@@ -1120,9 +1123,67 @@ fn walk_root() {
     assert!(paths.first().unwrap().to_str().unwrap() == "/");
 }
 
+lazy_static! {
+    static ref RELATIVE_MUTEX: Mutex<()> = Mutex::new(());
+}
+
 #[test]
-fn walk_relative_yields() {
-    assert_eq!(&WalkDir::new(".").into_iter().next().unwrap().unwrap().file_name, ".");
+fn walk_relative_1() {
+    let _shared = RELATIVE_MUTEX.lock().unwrap();
+    let (test_dir, _temp_dir) = test_dir();
+
+    env::set_current_dir(&test_dir).unwrap();
+    
+    let paths = local_paths(
+        WalkDir::new(".").sort(true),
+    );
+
+    assert_eq!(
+        paths,
+        vec![
+            " (0)",
+            "a.txt (1)",
+            "b.txt (1)",
+            "c.txt (1)",
+            "group 1 (1)",
+            "group 1/d.txt (2)",
+            "group 2 (1)",
+            "group 2/e.txt (2)",
+        ]
+    );
+
+    let root_dir_entry = WalkDir::new("..").into_iter().next().unwrap().unwrap();
+    assert_eq!(&root_dir_entry.file_name, "..");
+}
+
+#[test]
+fn walk_relative_2() {
+    let _shared = RELATIVE_MUTEX.lock().unwrap();
+    let (test_dir, _temp_dir) = test_dir();
+
+    env::set_current_dir(&test_dir.join("group 1")).unwrap();
+    
+    let paths = local_paths(
+        WalkDir::new("..").sort(true),
+    );
+
+    assert_eq!(
+        paths,
+        vec![
+            " (0)",
+            "a.txt (1)",
+            "b.txt (1)",
+            "c.txt (1)",
+            "group 1 (1)",
+            "group 1/d.txt (2)",
+            "group 2 (1)",
+            "group 2/e.txt (2)",
+        ]
+    );
+
+    let root_dir_entry = WalkDir::new(".").into_iter().next().unwrap().unwrap();
+    assert_eq!(&root_dir_entry.file_name, ".");
+
 }
 
 #[test]
