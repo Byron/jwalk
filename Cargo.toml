@@ -1,6 +1,6 @@
 [package]
 name = "jwalk"
-version = "0.4.1-alpha.0"
+version = "0.5.0"
 authors = ["Jesse Grosjean <jesse@hogbaysoftware.com>"]
 description = "Filesystem walk performed in parallel with streamed and sorted results."
 documentation = "https://docs.rs/jwalk/"
