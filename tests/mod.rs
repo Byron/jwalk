@@ -565,7 +565,6 @@ fn sym_noloop() {
     assert_eq!(5, r.ents().len());
 }
 
-/*
 #[test]
 fn sym_loop_detect() {
     let dir = Dir::tmp();
@@ -575,7 +574,8 @@ fn sym_loop_detect() {
     let wd = WalkDir::new(dir.path()).follow_links(true);
     let r = dir.run_recursive(wd);
 
-    let (ents, errs) = (r.sorted_ents(), r.errs());
+    let (ents, errs) = (r.ents(), r.errs());
+    println!("{}", errs[0]);
     assert_eq!(4, ents.len());
     assert_eq!(1, errs.len());
 
@@ -624,7 +624,7 @@ fn sym_file_self_loop_io_error() {
     let wd = WalkDir::new(dir.path()).follow_links(true);
     let r = dir.run_recursive(wd);
 
-    let (ents, errs) = (r.sorted_ents(), r.errs());
+    let (ents, errs) = (r.ents(), r.errs());
     assert_eq!(1, ents.len());
     assert_eq!(1, errs.len());
 
@@ -645,7 +645,7 @@ fn sym_dir_self_loop_io_error() {
     let wd = WalkDir::new(dir.path()).follow_links(true);
     let r = dir.run_recursive(wd);
 
-    let (ents, errs) = (r.sorted_ents(), r.errs());
+    let (ents, errs) = (r.ents(), r.errs());
     assert_eq!(1, ents.len());
     assert_eq!(1, errs.len());
 
@@ -657,7 +657,6 @@ fn sym_dir_self_loop_io_error() {
     assert!(err.loop_ancestor().is_none());
     assert!(err.io_error().is_some());
 }
-*/
 
 #[test]
 fn min_depth_1() {
@@ -668,10 +667,7 @@ fn min_depth_1() {
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
-    let expected = vec![
-        dir.join("a"),
-        dir.join("a").join("b"),
-    ];
+    let expected = vec![dir.join("a"), dir.join("a").join("b")];
     assert_eq!(expected, r.paths());
 }
 
@@ -684,9 +680,7 @@ fn min_depth_2() {
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
-    let expected = vec![
-        dir.join("a").join("b"),
-    ];
+    let expected = vec![dir.join("a").join("b")];
     assert_eq!(expected, r.paths());
 }
 
@@ -756,13 +750,14 @@ fn min_max_depth_diff_0() {
     let dir = Dir::tmp();
     dir.mkdirp("a/b/c");
 
-    let wd = WalkDir::new(dir.path()).min_depth(2).max_depth(2).sort(true);
+    let wd = WalkDir::new(dir.path())
+        .min_depth(2)
+        .max_depth(2)
+        .sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
-    let expected = vec![
-        dir.join("a").join("b"),
-    ];
+    let expected = vec![dir.join("a").join("b")];
     assert_eq!(expected, r.paths());
 }
 
@@ -771,14 +766,14 @@ fn min_max_depth_diff_1() {
     let dir = Dir::tmp();
     dir.mkdirp("a/b/c");
 
-    let wd = WalkDir::new(dir.path()).min_depth(1).max_depth(2).sort(true);
+    let wd = WalkDir::new(dir.path())
+        .min_depth(1)
+        .max_depth(2)
+        .sort(true);
     let r = dir.run_recursive(wd);
     r.assert_no_errors();
 
-    let expected = vec![
-        dir.join("a"),
-        dir.join("a").join("b"),
-    ];
+    let expected = vec![dir.join("a"), dir.join("a").join("b")];
     assert_eq!(expected, r.paths());
 }
 
@@ -1029,14 +1024,20 @@ fn walk_rayon_global() {
 
 #[test]
 fn walk_rayon_no_lockup() {
-    let pool = std::sync::Arc::new(rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap());
-    let _:Vec<_> = WalkDir::new("/Users/jessegrosjean/Documents/github/Workspace/Workspace/Workspace.rs2/tests/assets/linux_checkout")
+    // Without jwalk_par_bridge this locks
+    let pool = std::sync::Arc::new(
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap(),
+    );
+    let _: Vec<_> = WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
         .parallelism(Parallelism::RayonExistingPool(pool))
         .process_read_dir(|_, dir_entry_results| {
             for dir_entry_result in dir_entry_results {
-                let _ = dir_entry_result.as_ref().map(|dir_entry| {
-                    dir_entry.metadata()
-                });
+                let _ = dir_entry_result
+                    .as_ref()
+                    .map(|dir_entry| dir_entry.metadata());
             }
         })
         .sort(true)
@@ -1178,16 +1179,16 @@ fn save_state_with_process_read_dir() {
 
     // Test that both parent client state and children client state can be set
     // from process_read_dir callback.
-    let mut iter = WalkDirGeneric::<((usize), ())>::new(test_dir)
+    let mut iter = WalkDirGeneric::<(usize, usize)>::new(test_dir)
         .sort(true)
         .process_read_dir(|parent_branch_state, children| {
-            *parent_client_state += children.len();
+            *parent_branch_state += children.len();
             children.iter_mut().for_each(|each_result| {
                 if let Ok(each) = each_result {
                     if each.file_type.is_dir() {
-                        client_read_state += 1;
+                        client_state += 1;
                     }
-                    each.client_read_state = parent_branch_state;
+                    each.client_state = *parent_branch_state;
                     each.client_state = 1;
                 }
             });

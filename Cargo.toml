@@ -16,7 +16,7 @@ edition = "2018"
 travis-ci = { repository = "jessegrosjean/jwalk" }
 
 [dependencies]
-rayon = "1.2"
+rayon = "1.3"
 crossbeam = "0.7"
 
 [dev-dependencies]

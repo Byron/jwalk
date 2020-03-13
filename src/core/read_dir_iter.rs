@@ -57,7 +57,7 @@ impl<C: ClientState> ReadDirIter<C> {
 
                 parallelism.install(move || {
                     rayon::spawn(|| {
-                        read_dir_spec_iter.jwalk_par_iter_bridge().for_each_with(
+                        read_dir_spec_iter.jwalk_par_bridge().for_each_with(
                             run_context,
                             |run_context, ordered_read_dir_spec| {
                                 multi_threaded_walk_dir(ordered_read_dir_spec, run_context);

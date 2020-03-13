@@ -7,24 +7,23 @@ use crate::{ClientState, DirEntry};
 
 /// An error produced by recursively walking a directory.
 ///
-/// This error type is a light wrapper around [`std::io::Error`]. In particular,
-/// it adds the following information:
+/// This error type is a light wrapper around [`std::io::Error`]. In
+/// particular, it adds the following information:
 ///
 /// * The depth at which the error occurred in the file tree, relative to the
-///   root.
+/// root.
 /// * The path, if any, associated with the IO error.
 /// * An indication that a loop occurred when following symbolic links. In this
-///   case, there is no underlying IO error.
+/// case, there is no underlying IO error.
 ///
-/// To maintain good ergonomics, this type has a [`impl From<Error> for
-/// std::io::Error`][impl] defined which preserves the original context. This
-/// allows you to use an [`io::Result`] with methods in this crate if you don't
-/// care about accessing the underlying error data in a structured form.
+/// To maintain good ergonomics, this type has a
+/// [`impl From<Error> for std::io::Error`][impl] defined which preserves the original context.
+/// This allows you to use an [`io::Result`] with methods in this crate if you don't care about
+/// accessing the underlying error data in a structured form.
 ///
-/// [`std::io::Error`]:
-/// https://doc.rust-lang.org/stable/std/io/struct.Error.html [`io::Result`]:
-/// https://doc.rust-lang.org/stable/std/io/type.Result.html [impl]:
-/// struct.Error.html#impl-From%3CError%3E
+/// [`std::io::Error`]: https://doc.rust-lang.org/stable/std/io/struct.Error.html
+/// [`io::Result`]: https://doc.rust-lang.org/stable/std/io/type.Result.html
+/// [impl]: struct.Error.html#impl-From%3CError%3E
 #[derive(Debug)]
 pub struct Error {
     depth: usize,
@@ -37,7 +36,6 @@ enum ErrorInner {
         path: Option<PathBuf>,
         err: io::Error,
     },
-    #[allow(dead_code)]
     Loop {
         ancestor: PathBuf,
         child: PathBuf,
@@ -182,9 +180,9 @@ impl Error {
 
     pub(crate) fn from_entry<C: ClientState>(dent: &DirEntry<C>, err: io::Error) -> Self {
         Error {
-            depth: dent.depth,
+            depth: dent.depth(),
             inner: ErrorInner::Io {
-                path: Some(dent.path()),
+                path: Some(dent.path().to_path_buf()),
                 err: err,
             },
         }
@@ -200,7 +198,6 @@ impl Error {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn from_loop(depth: usize, ancestor: &Path, child: &Path) -> Self {
         Error {
             depth: depth,
@@ -213,7 +210,19 @@ impl Error {
 }
 
 impl error::Error for Error {
+    #[allow(deprecated)]
+    fn description(&self) -> &str {
+        match self.inner {
+            ErrorInner::Io { ref err, .. } => err.description(),
+            ErrorInner::Loop { .. } => "file system loop found",
+        }
+    }
+
     fn cause(&self) -> Option<&dyn error::Error> {
+        self.source()
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self.inner {
             ErrorInner::Io { ref err, .. } => Some(err),
             ErrorInner::Loop { .. } => None,
@@ -222,7 +231,7 @@ impl error::Error for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.inner {
             ErrorInner::Io {
                 path: None,

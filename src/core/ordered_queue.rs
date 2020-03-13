@@ -106,7 +106,7 @@ where
 
     fn try_next_relaxed(&mut self) -> Result<Ordered<T>, TryRecvError> {
         if self.is_stop() {
-            return Err(TryRecvError::Disconnected)
+            return Err(TryRecvError::Disconnected);
         }
 
         while let Ok(ordered_work) = self.receiver.try_recv() {
@@ -154,7 +154,7 @@ where
         let ordered = self.receive_buffer.pop().unwrap();
         self.ordered_matcher.advance_past(&ordered);
         Ok(ordered)
-    }    
+    }
 }
 
 impl<T> Iterator for OrderedQueueIter<T>

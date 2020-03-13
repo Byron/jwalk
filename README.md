@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jwalk = "0.3"
+jwalk = "0.5"
 ```
 
 Lean More: [docs.rs/jwalk](https://docs.rs/jwalk)

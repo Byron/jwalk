@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
 use jwalk::{Error, Parallelism, WalkDir, WalkDirGeneric};
 use num_cpus;
+use rayon::prelude::*;
 use std::cmp;
 use std::fs::Metadata;
 use std::path::PathBuf;
@@ -65,11 +66,19 @@ fn walk_benches(c: &mut Criterion) {
     });
 
     c.bench_function("jwalk (unsorted, 2 threads)", |b| {
-        b.iter(|| for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::RayonNewPool(2)) {})
+        b.iter(
+            || {
+                for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::RayonNewPool(2)) {}
+            },
+        )
     });
 
     c.bench_function("jwalk (unsorted, 1 thread)", |b| {
-        b.iter(|| for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::Serial) {})
+        b.iter(
+            || {
+                for _ in WalkDir::new(linux_dir()).parallelism(Parallelism::Serial) {}
+            },
+        )
     });
 
     c.bench_function("jwalk (sorted, 1 thread)", |b| {
@@ -83,7 +92,7 @@ fn walk_benches(c: &mut Criterion) {
 
     c.bench_function("jwalk (sorted, metadata, 1 thread)", |b| {
         b.iter(|| {
-            for _ in WalkDirGeneric::<((), (Option<Result<Metadata, Error>>))>::new(linux_dir())
+            for _ in WalkDirGeneric::<((), Option<Result<Metadata, Error>>)>::new(linux_dir())
                 .sort(true)
                 .parallelism(Parallelism::Serial)
                 .process_read_dir(|_, dir_entry_results| {

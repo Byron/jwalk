@@ -27,14 +27,14 @@ use rayon::iter::ParallelIterator;
 /// use any of the `ParallelIterator` methods:
 pub trait JWalkParallelBridge: Sized {
     /// Create a bridge from this type to a `ParallelIterator`.
-    fn jwalk_par_iter_bridge(self) -> JWalkIterBridge<Self>;
+    fn jwalk_par_bridge(self) -> JWalkIterBridge<Self>;
 }
 
 impl<T: Iterator + Send> JWalkParallelBridge for T
 where
     T::Item: Send,
 {
-    fn jwalk_par_iter_bridge(self) -> JWalkIterBridge<Self> {
+    fn jwalk_par_bridge(self) -> JWalkIterBridge<Self> {
         JWalkIterBridge { iter: self }
     }
 }
