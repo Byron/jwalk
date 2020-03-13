@@ -105,7 +105,7 @@ impl<C: ClientState> Iterator for ReadDirIter<C> {
                 read_dir_result_iter,
             } => read_dir_result_iter
                 .next()
-                .and_then(|read_dir_result| Some(read_dir_result.value)),
+                .map(|read_dir_result| read_dir_result.value),
         }
     }
 }
