@@ -322,7 +322,7 @@ fn process_dir_entry_result<C: ClientState>(
 
             if dir_entry.depth == 0 && dir_entry.file_type.is_symlink() {
                 // As a special case, if we are processing a root entry, then we
-                // always follow it even if it's a symlink and follow_linzks is
+                // always follow it even if it's a symlink and follow_links is
                 // false. We are careful to not let this change the semantics of
                 // the DirEntry however. Namely, the DirEntry should still
                 // respect the follow_links setting. When it's disabled, it
