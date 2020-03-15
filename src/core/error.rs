@@ -170,10 +170,10 @@ impl Error {
 
     pub(crate) fn from_path(depth: usize, pb: PathBuf, err: io::Error) -> Self {
         Error {
-            depth: depth,
+            depth,
             inner: ErrorInner::Io {
                 path: Some(pb),
-                err: err,
+                err,
             },
         }
     }
@@ -182,25 +182,22 @@ impl Error {
         Error {
             depth: dent.depth(),
             inner: ErrorInner::Io {
-                path: Some(dent.path().to_path_buf()),
-                err: err,
+                path: Some(dent.path()),
+                err,
             },
         }
     }
 
     pub(crate) fn from_io(depth: usize, err: io::Error) -> Self {
         Error {
-            depth: depth,
-            inner: ErrorInner::Io {
-                path: None,
-                err: err,
-            },
+            depth,
+            inner: ErrorInner::Io { path: None, err },
         }
     }
 
     pub(crate) fn from_loop(depth: usize, ancestor: &Path, child: &Path) -> Self {
         Error {
-            depth: depth,
+            depth,
             inner: ErrorInner::Loop {
                 ancestor: ancestor.to_path_buf(),
                 child: child.to_path_buf(),
