@@ -59,8 +59,8 @@ where
             receiver,
             ordered_matcher: OrderedMatcher::default(),
             receive_buffer: BinaryHeap::new(),
-            pending_count: pending_count,
-            stop: stop,
+            pending_count,
+            stop,
         },
     )
 }
