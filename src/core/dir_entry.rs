@@ -85,9 +85,7 @@ impl<C: ClientState> DirEntry<C> {
                 .map_err(|err| Error::from_path(depth, path.to_owned(), err))?
         };
 
-        let root_name = path.file_name().unwrap_or_else(|| {
-            path.as_os_str()
-        });
+        let root_name = path.file_name().unwrap_or_else(|| path.as_os_str());
 
         let read_children_path: Option<Arc<Path>> = if metadata.file_type().is_dir() {
             Some(Arc::from(path))

@@ -1,7 +1,7 @@
+use lazy_static::lazy_static;
+use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::env;
-use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 mod util;
@@ -1133,10 +1133,8 @@ fn walk_relative_1() {
     let (test_dir, _temp_dir) = test_dir();
 
     env::set_current_dir(&test_dir).unwrap();
-    
-    let paths = local_paths(
-        WalkDir::new(".").sort(true),
-    );
+
+    let paths = local_paths(WalkDir::new(".").sort(true));
 
     assert_eq!(
         paths,
@@ -1162,10 +1160,8 @@ fn walk_relative_2() {
     let (test_dir, _temp_dir) = test_dir();
 
     env::set_current_dir(&test_dir.join("group 1")).unwrap();
-    
-    let paths = local_paths(
-        WalkDir::new("..").sort(true),
-    );
+
+    let paths = local_paths(WalkDir::new("..").sort(true));
 
     assert_eq!(
         paths,
@@ -1183,7 +1179,6 @@ fn walk_relative_2() {
 
     let root_dir_entry = WalkDir::new(".").into_iter().next().unwrap().unwrap();
     assert_eq!(&root_dir_entry.file_name, ".");
-
 }
 
 #[test]
