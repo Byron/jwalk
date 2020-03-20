@@ -1,4 +1,6 @@
 use lazy_static::lazy_static;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -1045,6 +1047,27 @@ fn walk_rayon_no_lockup() {
         .sort(true)
         .into_iter()
         .collect();
+}
+
+#[test]
+fn combine_rayon_no_lockup() {
+    WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        .parallelism(Parallelism::RayonNewPool(0)) // lockup if don't use separate rayon pool
+        .sort(true)
+        .into_iter()
+        .par_bridge()
+        .filter_map(|dir_entry_result| {
+            let dir_entry = dir_entry_result.ok()?;
+            if dir_entry.file_type().is_file() {
+                let path = dir_entry.path();
+                let text = std::fs::read_to_string(path).ok()?;
+                if text.contains("hello world") {
+                    return Some(true);
+                }
+            }
+            None
+        })
+        .count();
 }
 
 #[test]

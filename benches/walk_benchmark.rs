@@ -5,7 +5,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
 use jwalk::{Error, Parallelism, WalkDir, WalkDirGeneric};
 use num_cpus;
-use rayon::prelude::*;
 use std::cmp;
 use std::fs::Metadata;
 use std::path::PathBuf;
