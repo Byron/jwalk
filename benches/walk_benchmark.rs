@@ -45,7 +45,7 @@ fn walk_benches(c: &mut Criterion) {
         b.iter(|| {
             for _ in WalkDirGeneric::<((), Option<Result<Metadata, Error>>)>::new(linux_dir())
                 .sort(true)
-                .process_read_dir(|_, dir_entry_results| {
+                .process_read_dir(|_, _, _, dir_entry_results| {
                     dir_entry_results.iter_mut().for_each(|dir_entry_result| {
                         if let Ok(dir_entry) = dir_entry_result {
                             dir_entry.client_state = Some(dir_entry.metadata());
@@ -94,7 +94,7 @@ fn walk_benches(c: &mut Criterion) {
             for _ in WalkDirGeneric::<((), Option<Result<Metadata, Error>>)>::new(linux_dir())
                 .sort(true)
                 .parallelism(Parallelism::Serial)
-                .process_read_dir(|_, dir_entry_results| {
+                .process_read_dir(|_, _, _, dir_entry_results| {
                     dir_entry_results.iter_mut().for_each(|dir_entry_result| {
                         if let Ok(dir_entry) = dir_entry_result {
                             dir_entry.client_state = Some(dir_entry.metadata());

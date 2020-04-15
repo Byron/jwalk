@@ -1037,7 +1037,7 @@ fn walk_rayon_no_lockup() {
     );
     let _: Vec<_> = WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
         .parallelism(Parallelism::RayonExistingPool(pool))
-        .process_read_dir(|_, dir_entry_results| {
+        .process_read_dir(|_, _, _, dir_entry_results| {
             for dir_entry_result in dir_entry_results {
                 let _ = dir_entry_result
                     .as_ref()
@@ -1211,7 +1211,7 @@ fn filter_groups_with_process_read_dir() {
         WalkDir::new(test_dir)
             .sort(true)
             // Filter groups out manually
-            .process_read_dir(|_parent, children| {
+            .process_read_dir(|_depth, _path, _parent, children| {
                 children.retain(|each_result| {
                     each_result
                         .as_ref()
@@ -1232,7 +1232,7 @@ fn filter_group_children_with_process_read_dir() {
         WalkDir::new(test_dir)
             .sort(true)
             // Filter group children
-            .process_read_dir(|_parent, children| {
+            .process_read_dir(|_depth, _path, _parent, children| {
                 children.iter_mut().for_each(|each_result| {
                     if let Ok(each) = each_result {
                         if each.file_name.to_string_lossy().starts_with("group") {
@@ -1253,6 +1253,18 @@ fn filter_group_children_with_process_read_dir() {
                 "group 2 (1)",
             ]
     );
+}
+
+#[test]
+fn test_read_linux() {
+    // only run this test if linux_checkout present
+    let linux_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/assets/linux_checkout");
+    if linux_dir.exists() {
+        for each in WalkDir::new(linux_dir) {
+            let path = each.unwrap().path();
+            assert!(path.exists(), path);
+        }
+    }
 }
 
 /*

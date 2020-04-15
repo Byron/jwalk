@@ -19,6 +19,7 @@ impl<C: ClientState> DirEntryIter<C> {
         root_entry_results: Vec<Result<DirEntry<C>>>,
         parallelism: Parallelism,
         min_depth: usize,
+        root_read_dir_state: C::ReadDirState,
         core_read_dir_callback: Arc<ReadDirCallback<C>>,
     ) -> DirEntryIter<C> {
         // 1. Gather read_dir_specs from root level
@@ -28,7 +29,7 @@ impl<C: ClientState> DirEntryIter<C> {
                 dir_entry_result
                     .as_ref()
                     .ok()?
-                    .read_children_spec(C::ReadDirState::default())
+                    .read_children_spec(root_read_dir_state.clone())
             })
             .collect();
 
