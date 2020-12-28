@@ -107,7 +107,7 @@ impl Error {
     ///
     /// # Example
     ///
-    /// ```rust,no-run
+    /// ```rust,no_run
     /// use std::io;
     /// use std::path::Path;
     ///
