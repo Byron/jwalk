@@ -1,6 +1,6 @@
 [package]
 name = "jwalk"
-version = "0.5.3-alpha.0"
+version = "0.6.0"
 authors = ["Jesse Grosjean <jesse@hogbaysoftware.com>"]
 description = "Filesystem walk performed in parallel with streamed and sorted results."
 documentation = "https://docs.rs/jwalk/"
@@ -16,7 +16,7 @@ edition = "2018"
 travis-ci = { repository = "jessegrosjean/jwalk" }
 
 [dependencies]
-rayon = "1.3"
+rayon = "1.5"
 crossbeam = "0.8"
 
 [dev-dependencies]

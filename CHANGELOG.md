@@ -1,4 +1,11 @@
-# 0.5 Breaking changes
+# 0.6
+
+Added depth and path being read to params to ProcessReadDirFunction callback.
+
+Allow setting initial root_read_dir_state (ReadDirState) instead of always
+getting ::default() value.
+
+# 0.5
 
 First major change is that API and behavior are now closer to [`walkdir`] and
 jwalk now runs the majority of `walkdir`s tests.
