@@ -32,60 +32,16 @@ fn checkout_linux_if_needed() {
     }
 }
 
-fn recursive_descent(
-    root: impl AsRef<Path>,
-    file_type: Option<std::fs::FileType>,
-    get_file_metadata: bool,
-) {
-    let root = root.as_ref();
-    let (_metadata, is_dir) = file_type
-        .map(|ft| {
-            (
-                if !ft.is_dir() && get_file_metadata {
-                    std::fs::symlink_metadata(root).ok()
-                } else {
-                    None
-                },
-                ft.is_dir(),
-            )
-        })
-        .or_else(|| {
-            std::fs::symlink_metadata(root)
-                .map(|m| {
-                    let is_dir = m.file_type().is_dir();
-                    (Some(m), is_dir)
-                })
-                .ok()
-        })
-        .unwrap_or((None, false));
-
-    if is_dir {
-        std::fs::read_dir(root)
-            .map(|iter| {
-                iter.filter_map(Result::ok)
-                    .collect::<Vec<_>>()
-                    .into_par_iter()
-                    .map(|entry| {
-                        recursive_descent(entry.path(), entry.file_type().ok(), get_file_metadata)
-                    })
-                    .for_each(|_| {})
-            })
-            .unwrap_or_default()
-    };
-}
-
 fn walk_benches(c: &mut Criterion) {
     checkout_linux_if_needed();
 
-    c.bench_function(
-        "simple recursive NO file metadata (unsorted, n threads)",
-        |b| b.iter(|| black_box(recursive_descent(linux_dir(), None, false))),
-    );
+    c.bench_function("rayon (unsorted, n threads)", |b| {
+        b.iter(|| black_box(rayon_recursive_descent(linux_dir(), None, false)))
+    });
 
-    c.bench_function(
-        "simple recursive WITH file metadata (unsorted, n threads)",
-        |b| b.iter(|| black_box(recursive_descent(linux_dir(), None, true))),
-    );
+    c.bench_function("rayon (unsorted, metadata, n threads)", |b| {
+        b.iter(|| black_box(rayon_recursive_descent(linux_dir(), None, true)))
+    });
 
     c.bench_function("jwalk (unsorted, n threads)", |b| {
         b.iter(|| for _ in WalkDir::new(linux_dir()) {})
@@ -248,6 +204,52 @@ fn walk_benches(c: &mut Criterion) {
             }
         })
     });
+}
+
+fn rayon_recursive_descent(
+    root: impl AsRef<Path>,
+    file_type: Option<std::fs::FileType>,
+    get_file_metadata: bool,
+) {
+    let root = root.as_ref();
+    let (_metadata, is_dir) = file_type
+        .map(|ft| {
+            (
+                if !ft.is_dir() && get_file_metadata {
+                    std::fs::symlink_metadata(root).ok()
+                } else {
+                    None
+                },
+                ft.is_dir(),
+            )
+        })
+        .or_else(|| {
+            std::fs::symlink_metadata(root)
+                .map(|m| {
+                    let is_dir = m.file_type().is_dir();
+                    (Some(m), is_dir)
+                })
+                .ok()
+        })
+        .unwrap_or((None, false));
+
+    if is_dir {
+        std::fs::read_dir(root)
+            .map(|iter| {
+                iter.filter_map(Result::ok)
+                    .collect::<Vec<_>>()
+                    .into_par_iter()
+                    .map(|entry| {
+                        rayon_recursive_descent(
+                            entry.path(),
+                            entry.file_type().ok(),
+                            get_file_metadata,
+                        )
+                    })
+                    .for_each(|_| {})
+            })
+            .unwrap_or_default()
+    };
 }
 
 criterion_group! {
