@@ -1,5 +1,5 @@
-// Same as https://github.com/rayon-rs/rayon/blob/master/src/iter/par_bridge.rs
-//
+
+// Same as https://github.com/rayon-rs/rayon/blob/master/src/iter/par_bridge.rs#66b17ff
 // Except for where indicated with "THIS IS THE CHANGE"
 use crossbeam::deque::{Steal, Stealer, Worker};
 
@@ -25,8 +25,29 @@ use rayon::iter::ParallelIterator;
 ///
 /// To use this trait, take an existing `Iterator` and call `par_bridge` on it. After that, you can
 /// use any of the `ParallelIterator` methods:
+///
+/// ```
+/// use rayon::iter::ParallelBridge;
+/// use rayon::prelude::ParallelIterator;
+/// use std::sync::mpsc::channel;
+///
+/// let rx = {
+///     let (tx, rx) = channel();
+///
+///     tx.send("one!");
+///     tx.send("two!");
+///     tx.send("three!");
+///
+///     rx
+/// };
+///
+/// let mut output: Vec<&'static str> = rx.into_iter().par_bridge().collect();
+/// output.sort_unstable();
+///
+/// assert_eq!(&*output, &["one!", "three!", "two!"]);
+/// ```
 pub trait JWalkParallelBridge: Sized {
-    /// Create a bridge from this type to a `ParallelIterator`.
+    /// Creates a bridge from this type to a `ParallelIterator`.
     fn jwalk_par_bridge(self) -> JWalkIterBridge<Self>;
 }
 
@@ -39,12 +60,12 @@ where
     }
 }
 
-/// `JWalkIterBridge` is a parallel iterator that wraps a sequential iterator.
+/// `IterBridge` is a parallel iterator that wraps a sequential iterator.
 ///
-/// This type is created when using the `par_bridge` method on `JWalkParallelBridge`. See the
-/// [`JWalkParallelBridge`] documentation for details.
+/// This type is created when using the `par_bridge` method on `ParallelBridge`. See the
+/// [`ParallelBridge`] documentation for details.
 ///
-/// [`JWalkParallelBridge`]: trait.JWalkParallelBridge.html
+/// [`ParallelBridge`]: trait.ParallelBridge.html
 #[derive(Debug, Clone)]
 pub struct JWalkIterBridge<Iter> {
     iter: Iter,
@@ -78,7 +99,7 @@ where
     }
 }
 
-struct IterParallelProducer<'a, Iter: Iterator + 'a> {
+struct IterParallelProducer<'a, Iter: Iterator> {
     split_count: &'a AtomicUsize,
     done: &'a AtomicBool,
     iter: &'a Mutex<(Iter, Worker<Iter::Item>)>,
@@ -107,16 +128,19 @@ where
         let mut count = self.split_count.load(Ordering::SeqCst);
 
         loop {
-            let done = self.done.load(Ordering::SeqCst);
+            // Check if the iterator is exhausted *and* we've consumed every item from it.
+            let done = self.done.load(Ordering::SeqCst) && self.items.is_empty();
+
             match count.checked_sub(1) {
                 Some(new_count) if !done => {
-                    let last_count =
-                        self.split_count
-                            .compare_and_swap(count, new_count, Ordering::SeqCst);
-                    if last_count == count {
-                        return (self.clone(), Some(self));
-                    } else {
-                        count = last_count;
+                    match self.split_count.compare_exchange_weak(
+                        count,
+                        new_count,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        Ok(_) => return (self.clone(), Some(self)),
+                        Err(last_count) => count = last_count,
                     }
                 }
                 _ => {
@@ -139,13 +163,26 @@ where
                     }
                 }
                 Steal::Empty => {
+                    // Don't storm the mutex if we're already done.
                     if self.done.load(Ordering::SeqCst) {
-                        // the iterator is out of items, no use in continuing
-                        return folder;
+                        // Someone might have pushed more between our `steal()` and `done.load()`
+                        if self.items.is_empty() {
+                            // The iterator is out of items, no use in continuing
+                            return folder;
+                        }
                     } else {
                         // our cache is out of items, time to load more from the iterator
                         match self.iter.try_lock() {
                             Ok(mut guard) => {
+                                // Check `done` again in case we raced with the previous lock
+                                // holder on its way out.
+                                if self.done.load(Ordering::SeqCst) {
+                                    if self.items.is_empty() {
+                                        return folder;
+                                    }
+                                    continue;
+                                }
+
                                 // THIS IS THE CHANGE... never call iter.next() more then once. Because
                                 // result of one iter.next() might be required to generate the next iter.next()
                                 //let count = current_num_threads();
@@ -169,7 +206,7 @@ where
                             }
                             Err(TryLockError::WouldBlock) => {
                                 // someone else has the mutex, just sit tight until it's ready
-                                yield_now(); //TODO: use a thread=pool-aware yield? (#548)
+                                yield_now(); //TODO: use a thread-pool-aware yield? (#548)
                             }
                             Err(TryLockError::Poisoned(_)) => {
                                 // any panics from other threads will have been caught by the pool,
