@@ -42,8 +42,8 @@ comments are copied directly from `walkdir`.
 
 ### Why use this crate?
 
-This crate is particularly fast when you want streamed sorted results. In my
-tests its about 4x `walkdir` speed for sorted results with metadata. Also this
+This crate is particularly good when you want streamed sorted results. In my
+tests it's about 4x `walkdir` speed for sorted results with metadata. Also this
 crate's `process_read_dir` callback allows you to arbitrarily
 sort/filter/skip/state entries before they are yielded.
 
