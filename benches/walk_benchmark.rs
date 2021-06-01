@@ -1,12 +1,14 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ignore::WalkBuilder;
 use jwalk::{Error, Parallelism, WalkDir, WalkDirGeneric};
 use num_cpus;
+use rayon::prelude::*;
 use std::cmp;
 use std::fs::Metadata;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc;
@@ -30,8 +32,52 @@ fn checkout_linux_if_needed() {
     }
 }
 
+#[derive(Default)]
+struct FsTree {
+    path: PathBuf,
+    children: Vec<FsTree>,
+}
+
+impl FsTree {
+    fn recursive_descent(root: impl AsRef<Path>, file_type: Option<std::fs::FileType>) -> Self {
+        let root = root.as_ref();
+        let is_dir = file_type
+            .map(|ft| ft.is_dir())
+            .or_else(|| {
+                std::fs::symlink_metadata(root)
+                    .map(|m| m.file_type().is_dir())
+                    .ok()
+            })
+            .unwrap_or(false);
+
+        let children: Vec<_> = if is_dir {
+            std::fs::read_dir(root)
+                .map(|iter| {
+                    let entries = iter.filter_map(Result::ok).collect::<Vec<_>>();
+                    entries
+                        .into_par_iter()
+                        .map(|entry| {
+                            FsTree::recursive_descent(entry.path(), entry.file_type().ok())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        FsTree {
+            children,
+            path: root.to_owned(),
+        }
+    }
+}
+
 fn walk_benches(c: &mut Criterion) {
     checkout_linux_if_needed();
+
+    c.bench_function("simple recursive (unsorted, n threads)", |b| {
+        b.iter(|| black_box(FsTree::recursive_descent(linux_dir(), None)))
+    });
 
     c.bench_function("jwalk (unsorted, n threads)", |b| {
         b.iter(|| for _ in WalkDir::new(linux_dir()) {})
