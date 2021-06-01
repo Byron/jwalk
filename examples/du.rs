@@ -1,8 +1,7 @@
 extern crate jwalk;
 
-use jwalk::{DirEntry, Error, WalkDirGeneric};
+use jwalk::{WalkDirGeneric};
 use std::env;
-use std::fs::Metadata;
 
 fn main() {
     let path = env::args().skip(1).next().unwrap_or("./".to_owned());
