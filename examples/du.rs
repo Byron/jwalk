@@ -1,14 +1,15 @@
 extern crate jwalk;
 
-use jwalk::{WalkDirGeneric};
+use jwalk::WalkDirGeneric;
 use std::env;
 
 fn main() {
     let path = env::args().skip(1).next().unwrap_or("./".to_owned());
     let mut total: u64 = 0;
 
-    for dir_entry_result in WalkDirGeneric::<((), Option<u64>)>::new(&path).process_read_dir(
-        |_, _, _, dir_entry_results| {
+    for dir_entry_result in WalkDirGeneric::<((), Option<u64>)>::new(&path)
+        .skip_hidden(false)
+        .process_read_dir(|_, _, _, dir_entry_results| {
             dir_entry_results.iter_mut().for_each(|dir_entry_result| {
                 if let Ok(dir_entry) = dir_entry_result {
                     if !dir_entry.file_type.is_dir() {
@@ -17,8 +18,8 @@ fn main() {
                     }
                 }
             })
-        },
-    ) {
+        })
+    {
         match dir_entry_result {
             Ok(dir_entry) => {
                 if let Some(len) = &dir_entry.client_state {
