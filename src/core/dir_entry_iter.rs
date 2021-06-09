@@ -5,7 +5,7 @@ use crate::Result;
 
 /// DirEntry iterator from `WalkDir.into_iter()`.
 ///
-/// Yeilds entries from recursive traversal of filesystem.
+/// Yields entries from recursive traversal of filesystem.
 pub struct DirEntryIter<C: ClientState> {
     min_depth: usize,
     // iterator yeilding next ReadDir results when needed
