@@ -1052,9 +1052,24 @@ fn walk_rayon_no_lockup() {
 }
 
 #[test]
-fn combine_rayon_no_lockup() {
+fn combine_with_rayon_no_lockup_1() {
+    // only run this test if linux_checkout present
+    let linux_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/assets/linux_checkout");
+    if linux_dir.exists() {
+        rayon::scope(|_| {
+            eprintln!("WalkDir…");
+            for _entry in WalkDir::new(linux_dir) {}
+            eprintln!("WalkDir completed");
+        });
+    }
+}
+
+#[test]
+fn combine_with_rayon_no_lockup_2() {    
     WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-        .parallelism(Parallelism::RayonNewPool(0)) // lockup if don't use separate rayon pool
+        // lockup if don't use separate rayon pool (old)
+        // doesn't seem to be a problem now ...
+        //.parallelism(Parallelism::RayonNewPool(0)) 
         .sort(true)
         .into_iter()
         .par_bridge()
@@ -1070,6 +1085,27 @@ fn combine_rayon_no_lockup() {
             None
         })
         .count();
+}
+
+// This test fails if you set num_threads to <= rounds.count()
+#[test]
+fn combine_with_rayon_no_lockup_3() {    
+    let rounds = vec![0, 1];
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(3)
+        .build()
+        .expect("Failed to initialize worker thread pool");
+
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    pool.install(|| {
+        rounds.par_iter().for_each(|round| {
+            eprintln!("Round {round}…");
+            for _entry in WalkDir::new(path.clone()) {}
+            eprintln!("Round {round} completed");
+        });    
+    })
 }
 
 #[test]
