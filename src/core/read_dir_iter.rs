@@ -37,35 +37,30 @@ impl<C: ClientState> ReadDirIter<C> {
             let stop = Arc::new(AtomicBool::new(false));
             let read_dir_result_queue = new_ordered_queue(stop.clone(), Ordering::Strict);
             let (read_dir_result_queue, read_dir_result_iter) = read_dir_result_queue;
+            let read_dir_spec_queue = new_ordered_queue(stop.clone(), Ordering::Relaxed);
+            let (read_dir_spec_queue, read_dir_spec_iter) = read_dir_spec_queue;
 
-            let walk_closure = move || {
-                let read_dir_spec_queue = new_ordered_queue(stop.clone(), Ordering::Relaxed);
-                let (read_dir_spec_queue, read_dir_spec_iter) = read_dir_spec_queue;
+            for (i, read_dir_spec) in read_dir_specs.into_iter().enumerate() {
+                read_dir_spec_queue
+                    .push(Ordered::new(read_dir_spec, IndexPath::new(vec![0]), i))
+                    .unwrap();
+            }
 
-                for (i, read_dir_spec) in read_dir_specs.into_iter().enumerate() {
-                    read_dir_spec_queue
-                        .push(Ordered::new(read_dir_spec, IndexPath::new(vec![0]), i))
-                        .unwrap();
-                }
-
-                let run_context = RunContext {
-                    stop,
-                    read_dir_spec_queue,
-                    read_dir_result_queue,
-                    core_read_dir_callback,
-                };
-
-                parallelism.install(move || {
-                    read_dir_spec_iter.par_bridge().for_each_with(
-                        run_context,
-                        |run_context, ordered_read_dir_spec| {
-                            multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
-                        },
-                    );
-                });
+            let run_context = RunContext {
+                stop,
+                read_dir_spec_queue,
+                read_dir_result_queue,
+                core_read_dir_callback,
             };
 
-            walk_closure();
+            parallelism.install(move || {
+                read_dir_spec_iter.par_bridge().for_each_with(
+                    run_context,
+                    |run_context, ordered_read_dir_spec| {
+                        multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
+                    },
+                );
+            });
 
             ReadDirIter::ParWalk {
                 read_dir_result_iter,
