@@ -21,7 +21,7 @@ crossbeam = "0.8"
 
 [dev-dependencies]
 criterion = "0.3"
-fs_extra = "1.1"
+fs_extra = "1.2"
 walkdir = "2.3"
 ignore = "0.4"
 tempfile = "3.1"
