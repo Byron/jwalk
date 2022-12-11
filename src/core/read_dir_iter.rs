@@ -56,18 +56,16 @@ impl<C: ClientState> ReadDirIter<C> {
                 };
 
                 parallelism.install(move || {
-                    rayon::spawn(|| {
-                        read_dir_spec_iter.par_bridge().for_each_with(
-                            run_context,
-                            |run_context, ordered_read_dir_spec| {
-                                multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
-                            },
-                        );
-                    });
+                    read_dir_spec_iter.par_bridge().for_each_with(
+                        run_context,
+                        |run_context, ordered_read_dir_spec| {
+                            multi_threaded_walk_dir(ordered_read_dir_spec, run_context);
+                        },
+                    );
                 });
             };
 
-            std::thread::spawn(walk_closure);
+            walk_closure();
 
             ReadDirIter::ParWalk {
                 read_dir_result_iter,
@@ -120,11 +118,12 @@ fn multi_threaded_walk_dir<C: ClientState>(
         ..
     } = ordered_read_dir_spec;
 
-    let read_dir_result = (run_context.core_read_dir_callback)(read_dir_spec);
+    let read_dir_result = (run_context.core_read_dir_callback)(read_dir_spec);    
     let ordered_read_children_specs = read_dir_result
         .as_ref()
         .ok()
         .map(|read_dir| read_dir.ordered_read_children_specs(&index_path));
+    
     let ordered_read_dir_result = Ordered::new(
         read_dir_result,
         index_path,

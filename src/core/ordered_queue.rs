@@ -124,6 +124,7 @@ where
 
     fn try_next_strict(&mut self) -> Result<Ordered<T>, TryRecvError> {
         let looking_for = &self.ordered_matcher.looking_for;
+        
         loop {
             if self.is_stop() {
                 return Err(TryRecvError::Disconnected);
