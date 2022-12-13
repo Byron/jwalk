@@ -3,6 +3,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.2 (2022-12-13)
+
+### Bug Fixes
+
+ - <csr-id-bd3e88017ea29c3b89b518f3a721ba35577b7666/> stalling issue when threadpool is used is no more.
+   The issue seems to have been that `install` blocks whereas `spawn`
+   properly releases the main thread.
+   
+   This seems to have been changed subtly due to changes in `rayon`,
+   which breaks an assumption on how the code is executed.
+   
+   Replacing `install()` with `spawn` calls resolved the issue.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 4 commits contributed to the release.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Merge branch 'stalling-issue' ([`7bd2f35`](https://github.com/Byron/jwalk/commit/7bd2f35d4fd106edbafa187ef4481333bb60da7d))
+    - stalling issue when threadpool is used is no more. ([`bd3e880`](https://github.com/Byron/jwalk/commit/bd3e88017ea29c3b89b518f3a721ba35577b7666))
+    - refactor ([`1032308`](https://github.com/Byron/jwalk/commit/10323089dbf00e01a0280a35f826ca269b6eeea6))
+    - print each path seen during iteration ([`5e83ad5`](https://github.com/Byron/jwalk/commit/5e83ad5f09852a6449f63b0c954eec81413de1c2))
+</details>
+
 ## 0.6.1 (2022-12-13)
 
 The first release under new ownership with no user-facing changes.
@@ -19,7 +53,7 @@ The first release under new ownership with no user-facing changes.
 
 <csr-read-only-do-not-edit/>
 
- - 29 commits contributed to the release over the course of 705 calendar days.
+ - 30 commits contributed to the release over the course of 705 calendar days.
  - 705 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -37,6 +71,7 @@ The first release under new ownership with no user-facing changes.
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release jwalk v0.6.1 ([`6a2781c`](https://github.com/Byron/jwalk/commit/6a2781c6211a6db777c08bcdeb60f0317c00bc3e))
     - prepare changelog prior to release ([`c772967`](https://github.com/Byron/jwalk/commit/c77296707df392193dc47bcd1f465fa813215b82))
     - another round of link adjustments ([`7c12dc3`](https://github.com/Byron/jwalk/commit/7c12dc333d5086ed41228ee410653def9ff5adf7))
     - thanks clippy ([`51e2b0d`](https://github.com/Byron/jwalk/commit/51e2b0d0330b264972422d44ca25affcced981d5))
