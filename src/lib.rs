@@ -498,12 +498,12 @@ impl Parallelism {
                     thread_pool = thread_pool.num_threads(*num_threads);
                 }
                 if let Ok(thread_pool) = thread_pool.build() {
-                    thread_pool.install(op);
+                    thread_pool.spawn(op);
                 } else {
                     rayon::spawn(op);
                 }
             }
-            Parallelism::RayonExistingPool(thread_pool) => thread_pool.install(op),
+            Parallelism::RayonExistingPool(thread_pool) => thread_pool.spawn(op),
         }
     }
 }

@@ -1,6 +1,6 @@
 extern crate jwalk;
 
-use jwalk::WalkDirGeneric;
+use jwalk::{Parallelism, WalkDirGeneric};
 use std::env;
 
 fn main() {
@@ -9,6 +9,7 @@ fn main() {
 
     for dir_entry_result in WalkDirGeneric::<((), Option<u64>)>::new(&path)
         .skip_hidden(false)
+        .parallelism(Parallelism::RayonNewPool(4))
         .process_read_dir(|_, _, _, dir_entry_results| {
             dir_entry_results.iter_mut().for_each(|dir_entry_result| {
                 if let Ok(dir_entry) = dir_entry_result {
@@ -23,6 +24,7 @@ fn main() {
         match dir_entry_result {
             Ok(dir_entry) => {
                 if let Some(len) = &dir_entry.client_state {
+                    eprintln!("counting {:?}", dir_entry.path());
                     total += len;
                 }
             }
