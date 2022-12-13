@@ -1087,27 +1087,6 @@ fn combine_with_rayon_no_lockup_2() {
         .count();
 }
 
-// This test fails if you set num_threads to <= rounds.count()
-#[test]
-fn combine_with_rayon_no_lockup_3() {    
-    let rounds = vec![0, 1];
-
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(3)
-        .build()
-        .expect("Failed to initialize worker thread pool");
-
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    pool.install(|| {
-        rounds.par_iter().for_each(|round| {
-            eprintln!("Round {round}…");
-            for _entry in WalkDir::new(path.clone()) {}
-            eprintln!("Round {round} completed");
-        });    
-    })
-}
-
 #[test]
 fn see_hidden_files() {
     let (test_dir, _temp_dir) = test_dir();
