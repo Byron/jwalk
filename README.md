@@ -7,7 +7,7 @@ Filesystem walk.
 - Entries streamed in sorted order 
 - Custom sort/filter/skip/state
 
-[![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=master)](https://travis-ci.org/jessegrosjean/jwalk)
+[![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=main)](https://travis-ci.org/jessegrosjean/jwalk)
 [![Latest version](http://meritbadge.herokuapp.com/jwalk)](https://crates.io/crates/jwalk)
 
 ### Usage
@@ -59,5 +59,5 @@ single directory with many files.
 
 ### Benchmarks
 
-[Benchmarks](https://github.com/jessegrosjean/jwalk/blob/master/benches/benchmarks.md)
+[Benchmarks](https://github.com/jessegrosjean/jwalk/blob/main/benches/benchmarks.md)
 comparing this crate with `walkdir` and `ignore`.
