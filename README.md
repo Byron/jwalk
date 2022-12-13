@@ -7,7 +7,7 @@ Filesystem walk.
 - Entries streamed in sorted order 
 - Custom sort/filter/skip/state
 
-[![Build Status](https://travis-ci.org/jessegrosjean/jwalk.svg?branch=main)](https://travis-ci.org/jessegrosjean/jwalk)
+[![Build Status](https://travis-ci.org/Byron/jwalk.svg?branch=main)](https://travis-ci.org/Byron/jwalk)
 [![Latest version](http://meritbadge.herokuapp.com/jwalk)](https://crates.io/crates/jwalk)
 
 ### Usage

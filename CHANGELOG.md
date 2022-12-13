@@ -25,4 +25,4 @@ means `DirEntry.metadata()` is never a cached value. Instead you want to read
 metadata you should do it in the `process_entries` callback and store whatever
 values you need as `client_state`. See this [benchmark] as an example.
 
-[benchmark]: https://github.com/jessegrosjean/jwalk/blob/main/benches/walk_benchmark.rs#L45
+[benchmark]: https://github.com/Byron/jwalk/blob/main/benches/walk_benchmark.rs#L45
