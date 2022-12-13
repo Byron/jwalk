@@ -1,0 +1,18 @@
+name: Rust
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v2
+    - name: tests
+      run: cargo test
+    - name: docs
+      run: cargo doc
