@@ -79,13 +79,13 @@ impl<C: ClientState> DirEntry<C> {
         follow_link_ancestors: Arc<Vec<Arc<Path>>>,
     ) -> Result<Self> {
         let metadata = if follow_link {
-            fs::metadata(&path).map_err(|err| Error::from_path(depth, path.to_owned(), err))?
+            fs::metadata(path).map_err(|err| Error::from_path(depth, path.to_owned(), err))?
         } else {
-            fs::symlink_metadata(&path)
+            fs::symlink_metadata(path)
                 .map_err(|err| Error::from_path(depth, path.to_owned(), err))?
         };
 
-        let root_name = path.file_name().unwrap_or_else(|| path.as_os_str());
+        let root_name = path.file_name().unwrap_or(path.as_os_str());
 
         let read_children_path: Option<Arc<Path>> = if metadata.file_type().is_dir() {
             Some(Arc::from(path))
@@ -196,16 +196,14 @@ impl<C: ClientState> DirEntry<C> {
         &self,
         client_read_state: C::ReadDirState,
     ) -> Option<ReadDirSpec<C>> {
-        if let Some(read_children_path) = self.read_children_path.as_ref() {
-            Some(ReadDirSpec {
+        self.read_children_path
+            .as_ref()
+            .map(|read_children_path| ReadDirSpec {
                 depth: self.depth,
                 client_read_state,
                 path: read_children_path.clone(),
                 follow_link_ancestors: self.follow_link_ancestors.clone(),
             })
-        } else {
-            None
-        }
     }
 
     pub(crate) fn follow_symlink(&self) -> Result<Self> {

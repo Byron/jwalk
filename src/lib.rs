@@ -392,7 +392,7 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
             root_entry_results,
             parallelism,
             min_depth,
-            root_read_dir_state.clone(),
+            root_read_dir_state,
             Arc::new(move |read_dir_spec| {
                 let ReadDirSpec {
                     path,
@@ -487,7 +487,7 @@ impl<C: ClientState> Clone for WalkDirOptions<C> {
 impl Parallelism {
     pub(crate) fn install<OP>(&self, op: OP)
     where
-        OP: FnOnce() -> () + Send + 'static,
+        OP: FnOnce() + Send + 'static,
     {
         match self {
             Parallelism::Serial => op(),
