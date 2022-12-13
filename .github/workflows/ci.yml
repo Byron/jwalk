@@ -16,3 +16,5 @@ jobs:
       run: cargo test
     - name: docs
       run: cargo doc
+    - name: bench
+      run: JWALK_BENCHMARK_DIR=~/ cargo bench
