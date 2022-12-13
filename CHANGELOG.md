@@ -1,3 +1,8 @@
+
+# Changing project ownership to @Byron
+
+Thanks and good luck!
+
 # 0.6
 
 Added depth and path being read to params to ProcessReadDirFunction callback.
