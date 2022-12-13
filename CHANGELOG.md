@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.6.1 (2022-12-13)
 
 The first release under new ownership with no user-facing changes.
 
@@ -19,7 +19,7 @@ The first release under new ownership with no user-facing changes.
 
 <csr-read-only-do-not-edit/>
 
- - 28 commits contributed to the release over the course of 705 calendar days.
+ - 29 commits contributed to the release over the course of 705 calendar days.
  - 705 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -37,6 +37,7 @@ The first release under new ownership with no user-facing changes.
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - prepare changelog prior to release ([`c772967`](https://github.com/Byron/jwalk/commit/c77296707df392193dc47bcd1f465fa813215b82))
     - another round of link adjustments ([`7c12dc3`](https://github.com/Byron/jwalk/commit/7c12dc333d5086ed41228ee410653def9ff5adf7))
     - thanks clippy ([`51e2b0d`](https://github.com/Byron/jwalk/commit/51e2b0d0330b264972422d44ca25affcced981d5))
     - run benchmarks on CI ([`cc0fd74`](https://github.com/Byron/jwalk/commit/cc0fd74d439fb24b063d3d6d4d05f3370d41bf65))
@@ -152,6 +153,8 @@ getting ::default() value.
 
 ## v0.5.0 (2020-03-13)
 
+<csr-id-11fa0bc9e8541af333aafb41cc89218435474df4/>
+
 First major change is that API and behavior are now closer to [`walkdir`] and
 jwalk now runs the majority of `walkdir`s tests.
 
@@ -164,8 +167,6 @@ Part of this second change is that `preload_metadata` option is removed. That
 means `DirEntry.metadata()` is never a cached value. Instead you want to read
 metadata you should do it in the `process_entries` callback and store whatever
 values you need as `client_state`. See this [benchmark] as an example.
-
-[benchmark]: https://github.com/Byron/jwalk/blob/main/benches/walk_benchmark.rs#L45
 
 ### Chore
 
