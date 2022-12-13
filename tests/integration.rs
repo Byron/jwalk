@@ -731,24 +731,6 @@ fn max_depth_2() {
     assert_eq!(expected, r.paths());
 }
 
-/*
-// FIXME: This test seems wrong. It should return nothing!
-#[test]
-fn min_max_depth_diff_nada() {
-    let dir = Dir::tmp();
-    dir.mkdirp("a/b/c");
-
-    let wd = WalkDir::new(dir.path()).min_depth(3).max_depth(2);
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.join("a").join("b").join("c"),
-    ];
-    assert_eq!(expected, r.sorted_paths());
-}
-*/
-
 #[test]
 fn min_max_depth_diff_0() {
     let dir = Dir::tmp();
@@ -781,71 +763,6 @@ fn min_max_depth_diff_1() {
     assert_eq!(expected, r.paths());
 }
 
-/*
-#[test]
-fn contents_first() {
-    let dir = Dir::tmp();
-    dir.touch("a");
-
-    let wd = WalkDir::new(dir.path()).contents_first(true);
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.join("a"),
-        dir.path().to_path_buf(),
-    ];
-    assert_eq!(expected, r.paths());
-}
-
-#[test]
-fn skip_current_dir() {
-    let dir = Dir::tmp();
-    dir.mkdirp("foo/bar/baz");
-    dir.mkdirp("quux");
-
-    let mut paths = vec![];
-    let mut it = WalkDir::new(dir.path()).into_iter();
-    while let Some(result) = it.next() {
-        let ent = result.unwrap();
-        paths.push(ent.path().to_path_buf());
-        if ent.file_name() == "bar" {
-            it.skip_current_dir();
-        }
-    }
-    paths.sort();
-
-    let expected = vec![
-        dir.path().to_path_buf(),
-        dir.join("foo"),
-        dir.join("foo").join("bar"),
-        dir.join("quux"),
-    ];
-    assert_eq!(expected, paths);
-}
-
-#[test]
-fn filter_entry() {
-    let dir = Dir::tmp();
-    dir.mkdirp("foo/bar/baz/abc");
-    dir.mkdirp("quux");
-
-    let wd = WalkDir::new(dir.path())
-        .into_iter()
-        .filter_entry(|ent| ent.file_name() != "baz");
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.path().to_path_buf(),
-        dir.join("foo"),
-        dir.join("foo").join("bar"),
-        dir.join("quux"),
-    ];
-    assert_eq!(expected, r.sorted_paths());
-}
-*/
-
 #[test]
 fn sort() {
     let dir = Dir::tmp();
@@ -866,72 +783,6 @@ fn sort() {
     ];
     assert_eq!(expected, r.paths());
 }
-
-/*
-
-#[cfg(target_os = "linux")]
-#[test]
-fn same_file_system() {
-    use std::path::Path;
-
-    // This test is a little weird since it's not clear whether it's a good
-    // idea to setup a distinct mounted volume in these tests. Instead, we
-    // probe for an existing one.
-    if !Path::new("/sys").is_dir() {
-        return;
-    }
-
-    let dir = Dir::tmp();
-    dir.touch("a");
-    dir.symlink_dir("/sys", "sys-link");
-
-    // First, do a sanity check that things work without following symlinks.
-    let wd = WalkDir::new(dir.path());
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.path().to_path_buf(),
-        dir.join("a"),
-        dir.join("sys-link"),
-    ];
-    assert_eq!(expected, r.sorted_paths());
-
-    // ... now follow symlinks and ensure we don't descend into /sys.
-    let wd = WalkDir::new(dir.path())
-        .same_file_system(true)
-        .follow_links(true);
-    let r = dir.run_recursive(wd);
-    r.assert_no_errors();
-
-    let expected = vec![
-        dir.path().to_path_buf(),
-        dir.join("a"),
-        dir.join("sys-link"),
-    ];
-    assert_eq!(expected, r.sorted_paths());
-}
-
-// Tests that skip_current_dir doesn't destroy internal invariants.
-//
-// See: https://github.com/BurntSushi/walkdir/issues/118
-#[test]
-fn regression_skip_current_dir() {
-    let dir = Dir::tmp();
-    dir.mkdirp("foo/a/b");
-    dir.mkdirp("foo/1/2");
-
-    let mut wd = WalkDir::new(dir.path()).max_open(1).into_iter();
-    wd.next();
-    wd.next();
-    wd.next();
-    wd.next();
-
-    wd.skip_current_dir();
-    wd.skip_current_dir();
-    wd.next();
-}
-*/
 
 use fs_extra;
 
@@ -969,18 +820,18 @@ fn walk_serial() {
             .parallelism(Parallelism::Serial)
             .sort(true),
     );
-    assert!(
-        paths
-            == vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 1/d.txt (2)",
-                "group 2 (1)",
-                "group 2/e.txt (2)",
-            ]
+    assert_eq!(
+        paths,
+        vec![
+            " (0)",
+            "a.txt (1)",
+            "b.txt (1)",
+            "c.txt (1)",
+            "group 1 (1)",
+            "group 1/d.txt (2)",
+            "group 2 (1)",
+            "group 2/e.txt (2)",
+        ]
     );
 }
 
@@ -992,18 +843,18 @@ fn sort_by_name_rayon_custom_2_threads() {
             .parallelism(Parallelism::RayonNewPool(2))
             .sort(true),
     );
-    assert!(
-        paths
-            == vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 1/d.txt (2)",
-                "group 2 (1)",
-                "group 2/e.txt (2)",
-            ]
+    assert_eq!(
+        paths,
+        vec![
+            " (0)",
+            "a.txt (1)",
+            "b.txt (1)",
+            "c.txt (1)",
+            "group 1 (1)",
+            "group 1/d.txt (2)",
+            "group 2 (1)",
+            "group 2/e.txt (2)",
+        ]
     );
 }
 
@@ -1011,18 +862,18 @@ fn sort_by_name_rayon_custom_2_threads() {
 fn walk_rayon_global() {
     let (test_dir, _temp_dir) = test_dir();
     let paths = local_paths(WalkDir::new(test_dir).sort(true));
-    assert!(
-        paths
-            == vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 1/d.txt (2)",
-                "group 2 (1)",
-                "group 2/e.txt (2)",
-            ]
+    assert_eq!(
+        paths,
+        vec![
+            " (0)",
+            "a.txt (1)",
+            "b.txt (1)",
+            "c.txt (1)",
+            "group 1 (1)",
+            "group 1/d.txt (2)",
+            "group 2 (1)",
+            "group 2/e.txt (2)",
+        ]
     );
 }
 
@@ -1065,11 +916,11 @@ fn combine_with_rayon_no_lockup_1() {
 }
 
 #[test]
-fn combine_with_rayon_no_lockup_2() {    
+fn combine_with_rayon_no_lockup_2() {
     WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
         // lockup if don't use separate rayon pool (old)
         // doesn't seem to be a problem now ...
-        //.parallelism(Parallelism::RayonNewPool(0)) 
+        //.parallelism(Parallelism::RayonNewPool(0))
         .sort(true)
         .into_iter()
         .par_bridge()
@@ -1239,7 +1090,7 @@ fn filter_groups_with_process_read_dir() {
                 });
             }),
     );
-    assert!(paths == vec![" (0)", "a.txt (1)", "b.txt (1)", "c.txt (1)",]);
+    assert_eq!(paths, vec![" (0)", "a.txt (1)", "b.txt (1)", "c.txt (1)",]);
 }
 
 #[test]
@@ -1259,16 +1110,16 @@ fn filter_group_children_with_process_read_dir() {
                 });
             }),
     );
-    assert!(
-        paths
-            == vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 2 (1)",
-            ]
+    assert_eq!(
+        paths,
+        vec![
+            " (0)",
+            "a.txt (1)",
+            "b.txt (1)",
+            "c.txt (1)",
+            "group 1 (1)",
+            "group 2 (1)",
+        ]
     );
 }
 
@@ -1279,42 +1130,7 @@ fn test_read_linux() {
     if linux_dir.exists() {
         for each in WalkDir::new(linux_dir) {
             let path = each.unwrap().path();
-            assert!(path.exists(), path);
+            assert!(path.exists(), "{:?}", path);
         }
     }
 }
-
-/*
-#[test]
-fn save_state_with_process_read_dir() {
-    let (test_dir, _temp_dir) = test_dir();
-
-    // Test that both parent client state and children client state can be set
-    // from process_read_dir callback.
-    let mut iter = WalkDirGeneric::<(usize, usize)>::new(test_dir)
-        .sort(true)
-        .process_read_dir(|parent_branch_state, children| {
-            *parent_branch_state += children.len();
-            children.iter_mut().for_each(|each_result| {
-                if let Ok(each) = each_result {
-                    if each.file_type.is_dir() {
-                        client_state += 1;
-                    }
-                    each.client_state = *parent_branch_state;
-                    each.client_state = 1;
-                }
-            });
-        })
-        .into_iter();
-
-    assert!(iter.next().unwrap().unwrap().client_state == 6); // " (0)"
-    assert!(iter.next().unwrap().unwrap().client_state == 1); // "a.txt (1)"
-    assert!(iter.next().unwrap().unwrap().client_state == 1); // "b.txt (1)"
-    assert!(iter.next().unwrap().unwrap().client_state == 1); // "c.txt (1)"
-    assert!(iter.next().unwrap().unwrap().client_state == 2); // "group 1 (1)",
-    assert!(iter.next().unwrap().unwrap().client_state == 1); // "group 1/d.txt (2)",
-    assert!(iter.next().unwrap().unwrap().client_state == 2); // "group 2 (1)",
-    assert!(iter.next().unwrap().unwrap().client_state == 1); // "group 2/e.txt (2)",
-    assert!(iter.next().is_none());
-}
-*/
