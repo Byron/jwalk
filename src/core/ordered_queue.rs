@@ -1,6 +1,7 @@
 //! Ordered queue backed by a channel.
 
 use crossbeam::channel::{self, Receiver, SendError, Sender, TryRecvError};
+use im::vector;
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Arc;
@@ -124,7 +125,7 @@ where
 
     fn try_next_strict(&mut self) -> Result<Ordered<T>, TryRecvError> {
         let looking_for = &self.ordered_matcher.looking_for;
-        
+
         loop {
             if self.is_stop() {
                 return Err(TryRecvError::Disconnected);
@@ -214,7 +215,7 @@ impl OrderedMatcher {
 impl Default for OrderedMatcher {
     fn default() -> OrderedMatcher {
         OrderedMatcher {
-            looking_for: IndexPath::new(vec![0]),
+            looking_for: IndexPath::new(vector![0]),
             child_count_stack: vec![1],
         }
     }

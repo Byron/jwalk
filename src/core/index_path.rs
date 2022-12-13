@@ -2,30 +2,30 @@ use std::cmp::Ordering;
 
 #[derive(Clone, Debug)]
 pub struct IndexPath {
-    pub indices: Vec<usize>,
+    pub indices: im::Vector<usize>,
 }
 
 impl IndexPath {
-    pub fn new(indices: Vec<usize>) -> IndexPath {
+    pub fn new(indices: im::Vector<usize>) -> IndexPath {
         IndexPath { indices }
     }
 
     pub fn adding(&self, index: usize) -> IndexPath {
         let mut indices = self.indices.clone();
-        indices.push(index);
+        indices.push_back(index);
         IndexPath::new(indices)
     }
 
     pub fn push(&mut self, index: usize) {
-        self.indices.push(index);
+        self.indices.push_back(index);
     }
 
     pub fn increment_last(&mut self) {
-        *self.indices.last_mut().unwrap() += 1;
+        *self.indices.back_mut().unwrap() += 1;
     }
 
     pub fn pop(&mut self) -> Option<usize> {
-        self.indices.pop()
+        self.indices.pop_back()
     }
 
     pub fn is_empty(&self) -> bool {

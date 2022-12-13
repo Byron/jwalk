@@ -1,3 +1,4 @@
+use im::vector;
 use std::sync::Arc;
 
 use super::*;
@@ -42,7 +43,7 @@ impl<C: ClientState> ReadDirIter<C> {
 
             for (i, read_dir_spec) in read_dir_specs.into_iter().enumerate() {
                 read_dir_spec_queue
-                    .push(Ordered::new(read_dir_spec, IndexPath::new(vec![0]), i))
+                    .push(Ordered::new(read_dir_spec, IndexPath::new(vector![0]), i))
                     .unwrap();
             }
 
@@ -113,12 +114,12 @@ fn multi_threaded_walk_dir<C: ClientState>(
         ..
     } = ordered_read_dir_spec;
 
-    let read_dir_result = (run_context.core_read_dir_callback)(read_dir_spec);    
+    let read_dir_result = (run_context.core_read_dir_callback)(read_dir_spec);
     let ordered_read_children_specs = read_dir_result
         .as_ref()
         .ok()
         .map(|read_dir| read_dir.ordered_read_children_specs(&index_path));
-    
+
     let ordered_read_dir_result = Ordered::new(
         read_dir_result,
         index_path,
