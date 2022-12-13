@@ -918,9 +918,6 @@ fn combine_with_rayon_no_lockup_1() {
 #[test]
 fn combine_with_rayon_no_lockup_2() {
     WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-        // lockup if don't use separate rayon pool (old)
-        // doesn't seem to be a problem now ...
-        //.parallelism(Parallelism::RayonNewPool(0))
         .sort(true)
         .into_iter()
         .par_bridge()
@@ -950,7 +947,10 @@ fn walk_file() {
     let (test_dir, _temp_dir) = test_dir();
     let walk_dir = WalkDir::new(test_dir.join("a.txt"));
     let mut iter = walk_dir.into_iter();
-    assert!(iter.next().unwrap().unwrap().file_name.to_str().unwrap() == "a.txt");
+    assert_eq!(
+        iter.next().unwrap().unwrap().file_name.to_str().unwrap(),
+        "a.txt"
+    );
     assert!(iter.next().is_none());
 }
 
@@ -959,7 +959,10 @@ fn walk_file_serial() {
     let (test_dir, _temp_dir) = test_dir();
     let walk_dir = WalkDir::new(test_dir.join("a.txt")).parallelism(Parallelism::Serial);
     let mut iter = walk_dir.into_iter();
-    assert!(iter.next().unwrap().unwrap().file_name.to_str().unwrap() == "a.txt");
+    assert_eq!(
+        iter.next().unwrap().unwrap().file_name.to_str().unwrap(),
+        "a.txt"
+    );
     assert!(iter.next().is_none());
 }
 
@@ -1011,7 +1014,7 @@ fn walk_root() {
         .into_iter()
         .filter_map(|each| Some(each.ok()?.path()))
         .collect();
-    assert!(paths.first().unwrap().to_str().unwrap() == "/");
+    assert_eq!(paths.first().unwrap().to_str().unwrap(), "/");
 }
 
 lazy_static! {
