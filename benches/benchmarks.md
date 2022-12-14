@@ -1,4 +1,4 @@
-Time to walk linux's source tree on iMac (Retina 5K, 27-inch, Late 2015):
+Time to walk Linux's source tree on iMac (Retina 5K, 27-inch, Late 2015):
 
 |                    | threads  | jwalk      | ignore     | walkdir      |
 |--------------------|----------|------------|------------|--------------|
