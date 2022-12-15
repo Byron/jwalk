@@ -9,7 +9,7 @@ use crate::Result;
 pub struct DirEntryIter<C: ClientState> {
     min_depth: usize,
     // iterator yielding next ReadDir results when needed
-    read_dir_iter: Peekable<ReadDirIter<C>>,
+    read_dir_iter: Option<Peekable<ReadDirIter<C>>>,
     // stack of ReadDir results, track location in filesystem traversal
     read_dir_results_stack: Vec<vec::IntoIter<Result<DirEntry<C>>>>,
 }
@@ -34,28 +34,33 @@ impl<C: ClientState> DirEntryIter<C> {
             .collect();
 
         // 2. Init new read_dir_iter from those specs
-        let read_dir_iter = ReadDirIter::new(read_dir_specs, parallelism, core_read_dir_callback);
+        let read_dir_iter =
+            ReadDirIter::try_new(read_dir_specs, parallelism, core_read_dir_callback)
+                .map(|iter| iter.peekable());
 
         // 3. Return DirEntryIter that will return initial root entries and then
         //    fill and process read_dir_iter until complete
         DirEntryIter {
             min_depth,
-            read_dir_iter: read_dir_iter.peekable(),
+            read_dir_iter,
             read_dir_results_stack: vec![root_entry_results.into_iter()],
         }
+        .into()
     }
 
-    fn push_next_read_dir_results(&mut self) -> Result<()> {
+    fn push_next_read_dir_results(
+        iter: &mut Peekable<ReadDirIter<C>>,
+        results: &mut Vec<vec::IntoIter<Result<DirEntry<C>>>>,
+    ) -> Result<()> {
         // Push next read dir results or return error if read failed
-        let read_dir_result = self.read_dir_iter.next().unwrap();
+        let read_dir_result = iter.next().unwrap();
         let read_dir = match read_dir_result {
             Ok(read_dir) => read_dir,
             Err(err) => return Err(err),
         };
 
         let ReadDir { results_list, .. } = read_dir;
-
-        self.read_dir_results_stack.push(results_list.into_iter());
+        results.push(results_list.into_iter());
 
         Ok(())
     }
@@ -82,7 +87,23 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
                 // 2.2 If dir_entry has a read_children_path means we need to read a new
                 // directory and push those results onto read_dir_results_stack
                 if dir_entry.read_children_path.is_some() {
-                    if let Err(err) = self.push_next_read_dir_results() {
+                    let iter = match self.read_dir_iter
+                    .as_mut()
+                        .ok_or_else(|| {
+                            Error::from_io(
+                                0,
+                                std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "rayon thread-pool too busy or dependency loop detected - aborting before possibility of deadlock",
+                                ),
+                            )
+                        }) {
+                        Ok(iter) => iter,
+                        Err(err) => return Some(Err(err)),
+                    };
+                    if let Err(err) =
+                        Self::push_next_read_dir_results(iter, &mut self.read_dir_results_stack)
+                    {
                         dir_entry.read_children_error = Some(err);
                     }
                 }

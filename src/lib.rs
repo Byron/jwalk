@@ -174,12 +174,24 @@ type ProcessReadDirFunction<C> = dyn Fn(Option<usize>, &Path, &mut <C as ClientS
 /// If you plan to perform lots of per file processing you might want to use Rayon to
 #[derive(Clone)]
 pub enum Parallelism {
-    /// Run on calling thread
+    /// Run on calling thread, similar to what happens in the `walkdir` crate.
     Serial,
-    /// Run in default rayon thread pool
-    RayonDefaultPool,
+    /// Run in default rayon thread pool.
+    RayonDefaultPool {
+        /// Define when we consider the rayon default pool too busy to serve our iteration and abort the iteration, defaulting to 1s.
+        ///
+        /// This can happen if `jwalk` is launched from within a par-iter on a pool that only has a single thread,
+        /// or if there are many parallel `jwalk` invocations that all use the same threadpool, rendering it too busy
+        /// to respond within this duration.
+        busy_timeout: std::time::Duration,
+    },
     /// Run in existing rayon thread pool
-    RayonExistingPool(Arc<ThreadPool>),
+    RayonExistingPool {
+        /// The pool to spawn our work onto.
+        pool: Arc<ThreadPool>,
+        /// Similar to [`Parallelism::RayonDefaultPool::busy_timeout`].
+        busy_timeout: std::time::Duration,
+    },
     /// Run in new rayon thread pool with # threads
     RayonNewPool(usize),
 }
@@ -209,7 +221,9 @@ impl<C: ClientState> WalkDirGeneric<C> {
                 max_depth: ::std::usize::MAX,
                 skip_hidden: true,
                 follow_links: false,
-                parallelism: Parallelism::RayonDefaultPool,
+                parallelism: Parallelism::RayonDefaultPool {
+                    busy_timeout: std::time::Duration::from_secs(1),
+                },
                 root_read_dir_state: C::ReadDirState::default(),
                 process_read_dir: None,
             },
@@ -485,13 +499,13 @@ impl<C: ClientState> Clone for WalkDirOptions<C> {
 }
 
 impl Parallelism {
-    pub(crate) fn install<OP>(&self, op: OP)
+    pub(crate) fn spawn<OP>(&self, op: OP)
     where
         OP: FnOnce() + Send + 'static,
     {
         match self {
             Parallelism::Serial => op(),
-            Parallelism::RayonDefaultPool => rayon::spawn(op),
+            Parallelism::RayonDefaultPool { .. } => rayon::spawn(op),
             Parallelism::RayonNewPool(num_threads) => {
                 let mut thread_pool = ThreadPoolBuilder::new();
                 if *num_threads > 0 {
@@ -503,7 +517,15 @@ impl Parallelism {
                     rayon::spawn(op);
                 }
             }
-            Parallelism::RayonExistingPool(thread_pool) => thread_pool.spawn(op),
+            Parallelism::RayonExistingPool { pool, .. } => pool.spawn(op),
+        }
+    }
+
+    pub(crate) fn timeout(&self) -> Option<std::time::Duration> {
+        match self {
+            Parallelism::Serial | Parallelism::RayonNewPool(_) => None,
+            Parallelism::RayonDefaultPool { busy_timeout }
+            | Parallelism::RayonExistingPool { busy_timeout, .. } => Some(*busy_timeout),
         }
     }
 }

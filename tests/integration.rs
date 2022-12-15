@@ -802,6 +802,9 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
         .into_iter()
         .map(|each_result| {
             let each_entry = each_result.unwrap();
+            if let Some(err) = each_entry.read_children_error.as_ref() {
+                panic!("should not encounter any child errors :{:?}", err);
+            }
             let path = each_entry.path().to_path_buf();
             let path = path.strip_prefix(&root).unwrap().to_path_buf();
             let mut path_string = path.to_str().unwrap().to_string();
@@ -889,7 +892,10 @@ fn walk_rayon_no_lockup() {
             .unwrap(),
     );
     let _: Vec<_> = WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-        .parallelism(Parallelism::RayonExistingPool(pool))
+        .parallelism(Parallelism::RayonExistingPool {
+            pool,
+            busy_timeout: std::time::Duration::from_millis(500),
+        })
         .process_read_dir(|_, _, _, dir_entry_results| {
             for dir_entry_result in dir_entry_results {
                 let _ = dir_entry_result
