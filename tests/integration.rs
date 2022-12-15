@@ -784,8 +784,6 @@ fn sort() {
     assert_eq!(expected, r.paths());
 }
 
-use fs_extra;
-
 fn test_dir() -> (PathBuf, tempfile::TempDir) {
     let template = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/test_dir");
     let temp_dir = tempfile::tempdir().unwrap();
@@ -805,7 +803,7 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
             if let Some(err) = each_entry.read_children_error.as_ref() {
                 panic!("should not encounter any child errors :{:?}", err);
             }
-            let path = each_entry.path().to_path_buf();
+            let path = each_entry.path();
             let path = path.strip_prefix(&root).unwrap().to_path_buf();
             let mut path_string = path.to_str().unwrap().to_string();
             path_string.push_str(&format!(" ({})", each_entry.depth));
@@ -993,7 +991,7 @@ fn error_when_path_removed_durring_iteration() {
     let _ = iter.next().unwrap().is_ok(); // " (0)",
 
     // Remove group 2 dir from disk
-    fs_extra::remove_items(&vec![test_dir.join("group 2")]).unwrap();
+    fs_extra::remove_items(&[test_dir.join("group 2")]).unwrap();
 
     let _ = iter.next().unwrap().is_ok(); // "a.txt (1)",
     let _ = iter.next().unwrap().is_ok(); // "b.txt (1)",

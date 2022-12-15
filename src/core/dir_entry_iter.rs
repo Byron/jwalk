@@ -45,7 +45,6 @@ impl<C: ClientState> DirEntryIter<C> {
             read_dir_iter,
             read_dir_results_stack: vec![root_entry_results.into_iter()],
         }
-        .into()
     }
 
     fn push_next_read_dir_results(
@@ -87,7 +86,7 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
                 // 2.2 If dir_entry has a read_children_path means we need to read a new
                 // directory and push those results onto read_dir_results_stack
                 if dir_entry.read_children_path.is_some() {
-                    let iter = match self.read_dir_iter.as_mut().ok_or_else(|| Error::busy()) {
+                    let iter = match self.read_dir_iter.as_mut().ok_or_else(Error::busy) {
                         Ok(iter) => iter,
                         Err(err) => return Some(Err(err)),
                     };
