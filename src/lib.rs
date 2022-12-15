@@ -126,6 +126,7 @@ use std::sync::Arc;
 use crate::core::{ReadDir, ReadDirSpec};
 
 pub use crate::core::{DirEntry, DirEntryIter, Error};
+pub use rayon;
 
 /// Builder for walking a directory.
 pub type WalkDir = WalkDirGeneric<((), ())>;
