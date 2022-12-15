@@ -69,12 +69,8 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
     type Item = Result<DirEntry<C>>;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if self.read_dir_results_stack.is_empty() {
-                return None;
-            }
-
             // 1. Get current read dir results iter from top of stack
-            let top_read_dir_results = self.read_dir_results_stack.last_mut().unwrap();
+            let top_read_dir_results = self.read_dir_results_stack.last_mut()?;
 
             // 2. If more results in current read dir then process
             if let Some(dir_entry_result) = top_read_dir_results.next() {

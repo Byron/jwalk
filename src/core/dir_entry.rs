@@ -212,7 +212,7 @@ impl<C: ClientState> DirEntry<C> {
         let dir_entry = DirEntry::from_path(self.depth, &path, true, origins)?;
 
         if dir_entry.file_type.is_dir() {
-            let target = fs::read_link(&path).unwrap();
+            let target = fs::read_link(&path).map_err(|err| Error::from_io(self.depth, err))?;
             for ancestor in self.follow_link_ancestors.iter().rev() {
                 if target.as_path() == ancestor.as_ref() {
                     return Err(Error::from_loop(
