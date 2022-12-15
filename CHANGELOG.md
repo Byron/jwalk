@@ -3,6 +3,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+This release makes iterator creation fallible to avoid potential hangs when there is no available thread to process
+any of the iterator work.
+
+### New Features
+
+ - <csr-id-7d5b8b870bfca2b1b68de1427fbdc0ec1a1bff2b/> `WalkDirGeneric::try_into_iter()` for early error handling.
+   If we can't instantiate the iterator due to a busy thread-pool,
+   we can now abort early instead of yielding a fake-entry just to
+   show an error occurred. This is the preferred way to instantiate
+   a  `jwalk` iterator.
+
+### New Features (BREAKING)
+
+ - <csr-id-3bf1bc226571869e4a5c357d4f6e40ad0a28f3ff/> Detect possible deadlocks when instantiating a parallel iterator.
+   Deadlocks can happen if the producer for results doesn't start as there
+   is no free thread on the rayon pool, and the only way for it to become free
+   is if the iterator produces results.
+   
+   We now offer a `busy_timeout` in the relevant variants of the
+   `Parallelism` enumeration to allow controlling how long we will wait
+   until we abort with an error.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 5 commits contributed to the release.
+ - 1 day passed between releases.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Thanks Clippy
+
+<csr-read-only-do-not-edit/>
+
+[Clippy](https://github.com/rust-lang/rust-clippy) helped 1 time to make code idiomatic. 
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - refactor ([`a94d14b`](https://github.com/Byron/jwalk/commit/a94d14b34980e5dd53ea6dde9c5676f44c80a7fa))
+    - thanks clippy ([`7e300c6`](https://github.com/Byron/jwalk/commit/7e300c68691f462ebb0848db915d7798b49dfccc))
+    - `WalkDirGeneric::try_into_iter()` for early error handling. ([`7d5b8b8`](https://github.com/Byron/jwalk/commit/7d5b8b870bfca2b1b68de1427fbdc0ec1a1bff2b))
+    - Detect possible deadlocks when instantiating a parallel iterator. ([`3bf1bc2`](https://github.com/Byron/jwalk/commit/3bf1bc226571869e4a5c357d4f6e40ad0a28f3ff))
+    - fix various IDE warnings ([`cc0009f`](https://github.com/Byron/jwalk/commit/cc0009f626ac86f92e20ce3d4e7c2a8f00d979a0))
+</details>
+
 ## 0.6.2 (2022-12-13)
 
 ### Bug Fixes
@@ -20,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 4 commits contributed to the release.
+ - 5 commits contributed to the release.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -31,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release jwalk v0.6.2 ([`2d1b2fb`](https://github.com/Byron/jwalk/commit/2d1b2fbe59a0ebb0413b54a8b8b0bba713e4d0e3))
     - Merge branch 'stalling-issue' ([`7bd2f35`](https://github.com/Byron/jwalk/commit/7bd2f35d4fd106edbafa187ef4481333bb60da7d))
     - stalling issue when threadpool is used is no more. ([`bd3e880`](https://github.com/Byron/jwalk/commit/bd3e88017ea29c3b89b518f3a721ba35577b7666))
     - refactor ([`1032308`](https://github.com/Byron/jwalk/commit/10323089dbf00e01a0280a35f826ca269b6eeea6))
