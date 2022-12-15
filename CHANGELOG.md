@@ -3,6 +3,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.8.0 (2022-12-15)
+
+### New Features (BREAKING)
+
+ - <csr-id-3a717219411a7478b90c4d694d57e28d8941dde1/> `Parallelism::RayonExistingPool::busy_timeout` is now optional.
+   That way we can indicate that no waiting should be done as we know the
+   given threadpool has enough resources.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 1 commit contributed to the release.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - `Parallelism::RayonExistingPool::busy_timeout` is now optional. ([`3a71721`](https://github.com/Byron/jwalk/commit/3a717219411a7478b90c4d694d57e28d8941dde1))
+</details>
+
 ## 0.7.0 (2022-12-15)
 
 This release makes iterator creation fallible to avoid potential hangs when there is no available thread to process
@@ -31,7 +57,7 @@ any of the iterator work.
 
 <csr-read-only-do-not-edit/>
 
- - 6 commits contributed to the release.
+ - 7 commits contributed to the release.
  - 1 day passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -49,6 +75,7 @@ any of the iterator work.
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release jwalk v0.7.0 ([`c265744`](https://github.com/Byron/jwalk/commit/c265744d74b3ea231eacee6332a99ee292f3018a))
     - prepare changelog prior to release ([`67364f9`](https://github.com/Byron/jwalk/commit/67364f910f1ba1ffeb5c30d0f75709431b212e2b))
     - refactor ([`a94d14b`](https://github.com/Byron/jwalk/commit/a94d14b34980e5dd53ea6dde9c5676f44c80a7fa))
     - thanks clippy ([`7e300c6`](https://github.com/Byron/jwalk/commit/7e300c68691f462ebb0848db915d7798b49dfccc))
