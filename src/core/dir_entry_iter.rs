@@ -9,7 +9,7 @@ use crate::Result;
 pub struct DirEntryIter<C: ClientState> {
     min_depth: usize,
     // iterator yielding next ReadDir results when needed
-    read_dir_iter: Option<Peekable<ReadDirIter<C>>>,
+    pub(crate) read_dir_iter: Option<Peekable<ReadDirIter<C>>>,
     // stack of ReadDir results, track location in filesystem traversal
     read_dir_results_stack: Vec<vec::IntoIter<Result<DirEntry<C>>>>,
 }
@@ -87,17 +87,7 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
                 // 2.2 If dir_entry has a read_children_path means we need to read a new
                 // directory and push those results onto read_dir_results_stack
                 if dir_entry.read_children_path.is_some() {
-                    let iter = match self.read_dir_iter
-                    .as_mut()
-                        .ok_or_else(|| {
-                            Error::from_io(
-                                0,
-                                std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    "rayon thread-pool too busy or dependency loop detected - aborting before possibility of deadlock",
-                                ),
-                            )
-                        }) {
+                    let iter = match self.read_dir_iter.as_mut().ok_or_else(|| Error::busy()) {
                         Ok(iter) => iter,
                         Err(err) => return Some(Err(err)),
                     };

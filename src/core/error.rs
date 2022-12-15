@@ -40,6 +40,7 @@ enum ErrorInner {
         ancestor: PathBuf,
         child: PathBuf,
     },
+    ThreadpoolBusy,
 }
 
 impl Error {
@@ -51,6 +52,7 @@ impl Error {
     /// [`std::fs::read_dir`]: https://doc.rust-lang.org/stable/std/fs/fn.read_dir.html
     pub fn path(&self) -> Option<&Path> {
         match self.inner {
+            ErrorInner::ThreadpoolBusy => None,
             ErrorInner::Io { path: None, .. } => None,
             ErrorInner::Io {
                 path: Some(ref path),
@@ -152,8 +154,15 @@ impl Error {
     pub fn io_error(&self) -> Option<&io::Error> {
         match self.inner {
             ErrorInner::Io { ref err, .. } => Some(err),
-            ErrorInner::Loop { .. } => None,
+            _ => None,
         }
+    }
+
+    /// Returns true if this error is due to a busy thread-pool that prevented its effective use.
+    ///
+    /// Note that business detection is timeout based, and we don't know if it would have been a deadlock or not.
+    pub fn is_busy(&self) -> bool {
+        matches!(self.inner, ErrorInner::ThreadpoolBusy)
     }
 
     /// Similar to [`io_error`] except consumes self to convert to the original
@@ -164,10 +173,16 @@ impl Error {
     pub fn into_io_error(self) -> Option<io::Error> {
         match self.inner {
             ErrorInner::Io { err, .. } => Some(err),
-            ErrorInner::Loop { .. } => None,
+            _ => None,
         }
     }
 
+    pub(crate) fn busy() -> Self {
+        Error {
+            depth: 0,
+            inner: ErrorInner::ThreadpoolBusy,
+        }
+    }
     pub(crate) fn from_path(depth: usize, pb: PathBuf, err: io::Error) -> Self {
         Error {
             depth,
@@ -210,7 +225,7 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self.inner {
             ErrorInner::Io { ref err, .. } => Some(err),
-            ErrorInner::Loop { .. } => None,
+            ErrorInner::Loop { .. } | ErrorInner::ThreadpoolBusy => None,
         }
     }
 
@@ -219,6 +234,7 @@ impl error::Error for Error {
         match self.inner {
             ErrorInner::Io { ref err, .. } => err.description(),
             ErrorInner::Loop { .. } => "file system loop found",
+            ErrorInner::ThreadpoolBusy => "thread-pool busy",
         }
     }
 
@@ -230,6 +246,7 @@ impl error::Error for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.inner {
+            ErrorInner::ThreadpoolBusy => f.write_str("rayon thread-pool too busy or dependency loop detected - aborting before possibility of deadlock"),
             ErrorInner::Io {
                 path: None,
                 ref err,
@@ -272,6 +289,10 @@ impl From<Error> for io::Error {
             } => err.kind(),
             Error {
                 inner: ErrorInner::Loop { .. },
+                ..
+            } => io::ErrorKind::Other,
+            Error {
+                inner: ErrorInner::ThreadpoolBusy,
                 ..
             } => io::ErrorKind::Other,
         };

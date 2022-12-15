@@ -212,6 +212,10 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// path root. If root is a directory, then it is the first item yielded by
     /// the iterator. If root is a file, then it is the first and only item
     /// yielded by the iterator.
+    ///
+    /// Note that his iterator can fail on the first element if `into_iter()` is used as it
+    /// has to be infallible. Use [`try_into_iter()`][WalkDirGeneric::try_into_iter()]
+    /// instead for error handling.
     pub fn new<P: AsRef<Path>>(root: P) -> Self {
         WalkDirGeneric {
             root: root.as_ref().to_path_buf(),
@@ -227,6 +231,16 @@ impl<C: ClientState> WalkDirGeneric<C> {
                 root_read_dir_state: C::ReadDirState::default(),
                 process_read_dir: None,
             },
+        }
+    }
+
+    /// Try to create an iterator or fail if the rayon threadpool (in any configuration) is busy.
+    pub fn try_into_iter(self) -> Result<DirEntryIter<C>> {
+        let iter = self.into_iter();
+        if iter.read_dir_iter.is_none() {
+            Err(Error::busy())
+        } else {
+            Ok(iter)
         }
     }
 
