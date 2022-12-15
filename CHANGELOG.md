@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.7.0 (2022-12-15)
 
 This release makes iterator creation fallible to avoid potential hangs when there is no available thread to process
 any of the iterator work.
@@ -31,7 +31,7 @@ any of the iterator work.
 
 <csr-read-only-do-not-edit/>
 
- - 5 commits contributed to the release.
+ - 6 commits contributed to the release.
  - 1 day passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -49,6 +49,7 @@ any of the iterator work.
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - prepare changelog prior to release ([`67364f9`](https://github.com/Byron/jwalk/commit/67364f910f1ba1ffeb5c30d0f75709431b212e2b))
     - refactor ([`a94d14b`](https://github.com/Byron/jwalk/commit/a94d14b34980e5dd53ea6dde9c5676f44c80a7fa))
     - thanks clippy ([`7e300c6`](https://github.com/Byron/jwalk/commit/7e300c68691f462ebb0848db915d7798b49dfccc))
     - `WalkDirGeneric::try_into_iter()` for early error handling. ([`7d5b8b8`](https://github.com/Byron/jwalk/commit/7d5b8b870bfca2b1b68de1427fbdc0ec1a1bff2b))
