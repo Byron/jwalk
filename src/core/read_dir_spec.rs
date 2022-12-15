@@ -22,6 +22,6 @@ pub struct ReadDirSpec<C: ClientState> {
     /// when reading this directory's parent. One intended use case is to store
     /// `.gitignore` state to filter entries during the walk.
     pub client_read_state: C::ReadDirState,
-    // Origins of synlinks followed to get to this entry.
+    // Origins of symlinks followed to get to this entry.
     pub(crate) follow_link_ancestors: Arc<Vec<Arc<Path>>>,
 }

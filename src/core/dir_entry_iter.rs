@@ -8,7 +8,7 @@ use crate::Result;
 /// Yields entries from recursive traversal of filesystem.
 pub struct DirEntryIter<C: ClientState> {
     min_depth: usize,
-    // iterator yeilding next ReadDir results when needed
+    // iterator yielding next ReadDir results when needed
     read_dir_iter: Peekable<ReadDirIter<C>>,
     // stack of ReadDir results, track location in filesystem traversal
     read_dir_results_stack: Vec<vec::IntoIter<Result<DirEntry<C>>>>,

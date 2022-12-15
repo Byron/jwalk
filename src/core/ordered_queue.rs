@@ -69,7 +69,7 @@ impl<T> OrderedQueue<T>
 where
     T: Send,
 {
-    pub fn push(&self, ordered: Ordered<T>) -> std::result::Result<(), SendError<Ordered<T>>> {
+    pub fn push(&self, ordered: Ordered<T>) -> Result<(), SendError<Ordered<T>>> {
         self.pending_count.fetch_add(1, AtomicOrdering::SeqCst);
         self.sender.send(ordered)
     }
@@ -124,7 +124,7 @@ where
 
     fn try_next_strict(&mut self) -> Result<Ordered<T>, TryRecvError> {
         let looking_for = &self.ordered_matcher.looking_for;
-        
+
         loop {
             if self.is_stop() {
                 return Err(TryRecvError::Disconnected);

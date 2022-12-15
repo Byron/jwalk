@@ -9,7 +9,7 @@ use crate::{ClientState, Error, ReadDirSpec, Result};
 /// Representation of a file or directory.
 ///
 /// This representation does not wrap a `std::fs::DirEntry`. Instead it copies
-/// `file_name`, `file_type`, and optionaly `metadata` out of the underlying
+/// `file_name`, `file_type`, and optionally `metadata` out of the underlying
 /// `std::fs::DirEntry`. This allows it to quickly drop the underlying file
 /// descriptor.
 pub struct DirEntry<C: ClientState> {
@@ -37,7 +37,7 @@ pub struct DirEntry<C: ClientState> {
     pub read_children_error: Option<Error>,
     // True if [`follow_links`] is `true` AND was created from a symlink path.
     follow_link: bool,
-    // Origins of synlinks followed to get to this entry.
+    // Origins of symlinks followed to get to this entry.
     follow_link_ancestors: Arc<Vec<Arc<Path>>>,
 }
 
@@ -114,7 +114,7 @@ impl<C: ClientState> DirEntry<C> {
     /// This never makes any system calls.
     ///
     /// [`follow_links`]: struct.WalkDir.html#method.follow_links
-    pub fn file_type(&self) -> fs::FileType {
+    pub fn file_type(&self) -> FileType {
         self.file_type
     }
 
@@ -129,8 +129,8 @@ impl<C: ClientState> DirEntry<C> {
     /// Returns the depth at which this entry was created relative to the root.
     ///
     /// The smallest depth is `0` and always corresponds to the path given
-    /// to the `new` function on `WalkDir`. Its direct descendents have depth
-    /// `1`, and their descendents have depth `2`, and so on.
+    /// to the `new` function on `WalkDir`. Its direct descendants have depth
+    /// `1`, and their descendants have depth `2`, and so on.
     pub fn depth(&self) -> usize {
         self.depth
     }
@@ -212,7 +212,7 @@ impl<C: ClientState> DirEntry<C> {
         let dir_entry = DirEntry::from_path(self.depth, &path, true, origins)?;
 
         if dir_entry.file_type.is_dir() {
-            let target = std::fs::read_link(&path).unwrap();
+            let target = fs::read_link(&path).unwrap();
             for ancestor in self.follow_link_ancestors.iter().rev() {
                 if target.as_path() == ancestor.as_ref() {
                     return Err(Error::from_loop(

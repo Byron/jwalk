@@ -82,8 +82,8 @@ impl Error {
     /// Returns the depth at which this error occurred relative to the root.
     ///
     /// The smallest depth is `0` and always corresponds to the path given to
-    /// the [`new`] function on [`WalkDir`]. Its direct descendents have depth
-    /// `1`, and their descendents have depth `2`, and so on.
+    /// the [`new`] function on [`WalkDir`]. Its direct descendants have depth
+    /// `1`, and their descendants have depth `2`, and so on.
     ///
     /// [`new`]: struct.WalkDir.html#method.new
     /// [`WalkDir`]: struct.WalkDir.html
@@ -207,6 +207,13 @@ impl Error {
 }
 
 impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self.inner {
+            ErrorInner::Io { ref err, .. } => Some(err),
+            ErrorInner::Loop { .. } => None,
+        }
+    }
+
     #[allow(deprecated)]
     fn description(&self) -> &str {
         match self.inner {
@@ -217,13 +224,6 @@ impl error::Error for Error {
 
     fn cause(&self) -> Option<&dyn error::Error> {
         self.source()
-    }
-
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self.inner {
-            ErrorInner::Io { ref err, .. } => Some(err),
-            ErrorInner::Loop { .. } => None,
-        }
     }
 }
 
