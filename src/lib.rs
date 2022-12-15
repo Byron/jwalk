@@ -189,8 +189,9 @@ pub enum Parallelism {
     RayonExistingPool {
         /// The pool to spawn our work onto.
         pool: Arc<ThreadPool>,
-        /// Similar to [`Parallelism::RayonDefaultPool::busy_timeout`].
-        busy_timeout: std::time::Duration,
+        /// Similar to [`Parallelism::RayonDefaultPool::busy_timeout`] if `Some`, but can be `None` to skip the deadlock check
+        /// in case you know that there is at least one free thread available on the pool.
+        busy_timeout: Option<std::time::Duration>,
     },
     /// Run in new rayon thread pool with # threads
     RayonNewPool(usize),
@@ -538,8 +539,8 @@ impl Parallelism {
     pub(crate) fn timeout(&self) -> Option<std::time::Duration> {
         match self {
             Parallelism::Serial | Parallelism::RayonNewPool(_) => None,
-            Parallelism::RayonDefaultPool { busy_timeout }
-            | Parallelism::RayonExistingPool { busy_timeout, .. } => Some(*busy_timeout),
+            Parallelism::RayonDefaultPool { busy_timeout } => Some(*busy_timeout),
+            Parallelism::RayonExistingPool { busy_timeout, .. } => *busy_timeout,
         }
     }
 }

@@ -892,7 +892,7 @@ fn walk_rayon_no_lockup() {
     let _: Vec<_> = WalkDir::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
         .parallelism(Parallelism::RayonExistingPool {
             pool,
-            busy_timeout: std::time::Duration::from_millis(500),
+            busy_timeout: std::time::Duration::from_millis(500).into(),
         })
         .process_read_dir(|_, _, _, dir_entry_results| {
             for dir_entry_result in dir_entry_results {
