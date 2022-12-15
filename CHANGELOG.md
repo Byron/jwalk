@@ -3,13 +3,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.8.0 (2022-12-15)
+## 0.8.1 (2022-12-15)
 
-### New Features (BREAKING)
+### New Features
 
- - <csr-id-3a717219411a7478b90c4d694d57e28d8941dde1/> `Parallelism::RayonExistingPool::busy_timeout` is now optional.
-   That way we can indicate that no waiting should be done as we know the
-   given threadpool has enough resources.
+ - <csr-id-b49e157b539150a44b761e43d8b09621367e760c/> re-export `rayon` in the crate root.
+   This makes creating a `ThreadPool` easier as it doesn't force us to
+   maintain our own `rayon` dependency.
 
 ### Commit Statistics
 
@@ -26,6 +26,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - re-export `rayon` in the crate root. ([`b49e157`](https://github.com/Byron/jwalk/commit/b49e157b539150a44b761e43d8b09621367e760c))
+</details>
+
+## 0.8.0 (2022-12-15)
+
+### New Features (BREAKING)
+
+ - <csr-id-3a717219411a7478b90c4d694d57e28d8941dde1/> `Parallelism::RayonExistingPool::busy_timeout` is now optional.
+   That way we can indicate that no waiting should be done as we know the
+   given threadpool has enough resources.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release jwalk v0.8.0 ([`be0bd21`](https://github.com/Byron/jwalk/commit/be0bd21bd5213033ac55b90ec7753d6e72b4bd84))
     - `Parallelism::RayonExistingPool::busy_timeout` is now optional. ([`3a71721`](https://github.com/Byron/jwalk/commit/3a717219411a7478b90c4d694d57e28d8941dde1))
 </details>
 
