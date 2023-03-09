@@ -4,7 +4,7 @@ use std::fs::{self, FileType};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::{ClientState, Error, ReadDirSpec, Result};
+use crate::{ClientState, Error, ReadChildren, ReadDirSpec, Result};
 
 /// Representation of a file or directory.
 ///
@@ -26,15 +26,11 @@ pub struct DirEntry<C: ClientState> {
     pub client_state: C::DirEntryState,
     /// Path used by this entry's parent to read this entry.
     pub parent_path: Arc<Path>,
-    /// Path that will be used to read child entries. This is automatically set
-    /// for directories. The
-    /// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir) callback
-    /// may set this field to `None` to skip reading the contents of a
-    /// particular directory.
-    pub read_children_path: Option<Arc<Path>>,
-    /// If `read_children_path` is set and resulting `fs::read_dir` generates an error
-    /// then that error is stored here.
-    pub read_children_error: Option<Error>,
+    /// Describes how to recurse from this DirEntry.
+    /// The [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir)
+    /// callback may set this field to `None` to skip reading the
+    /// contents of a particular directory.
+    pub read_children: Option<ReadChildren<C>>,
     // True if [`follow_links`] is `true` AND was created from a symlink path.
     follow_link: bool,
     // Origins of symlinks followed to get to this entry.
@@ -52,8 +48,12 @@ impl<C: ClientState> DirEntry<C> {
             .file_type()
             .map_err(|err| Error::from_path(depth, fs_dir_entry.path(), err))?;
         let file_name = fs_dir_entry.file_name();
-        let read_children_path: Option<Arc<Path>> = if file_type.is_dir() {
-            Some(Arc::from(parent_path.join(&file_name)))
+        let read_children: Option<ReadChildren<C>> = if file_type.is_dir() {
+            Some(ReadChildren {
+                path: Arc::from(parent_path.join(&file_name)),
+                error: None,
+                client_read_state: None,
+            })
         } else {
             None
         };
@@ -63,8 +63,7 @@ impl<C: ClientState> DirEntry<C> {
             file_name,
             file_type,
             parent_path,
-            read_children_path,
-            read_children_error: None,
+            read_children,
             client_state: C::DirEntryState::default(),
             follow_link: false,
             follow_link_ancestors,
@@ -87,8 +86,12 @@ impl<C: ClientState> DirEntry<C> {
 
         let root_name = path.file_name().unwrap_or(path.as_os_str());
 
-        let read_children_path: Option<Arc<Path>> = if metadata.file_type().is_dir() {
-            Some(Arc::from(path))
+        let read_children = if metadata.file_type().is_dir() {
+            Some(ReadChildren {
+                path: Arc::from(path),
+                error: None,
+                client_read_state: None,
+            })
         } else {
             None
         };
@@ -98,8 +101,7 @@ impl<C: ClientState> DirEntry<C> {
             file_name: root_name.to_owned(),
             file_type: metadata.file_type(),
             parent_path: Arc::from(path.parent().map(Path::to_path_buf).unwrap_or_default()),
-            read_children_path,
-            read_children_error: None,
+            read_children,
             client_state: C::DirEntryState::default(),
             follow_link,
             follow_link_ancestors,
@@ -196,12 +198,15 @@ impl<C: ClientState> DirEntry<C> {
         &self,
         client_read_state: C::ReadDirState,
     ) -> Option<ReadDirSpec<C>> {
-        self.read_children_path
+        self.read_children
             .as_ref()
-            .map(|read_children_path| ReadDirSpec {
+            .map(|read_children| ReadDirSpec {
                 depth: self.depth,
-                client_read_state,
-                path: read_children_path.clone(),
+                client_read_state: read_children
+                    .client_read_state
+                    .clone()
+                    .unwrap_or(client_read_state),
+                path: read_children.path.clone(),
                 follow_link_ancestors: self.follow_link_ancestors.clone(),
             })
     }

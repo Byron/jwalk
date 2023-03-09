@@ -79,9 +79,9 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
                     Ok(dir_entry) => dir_entry,
                     Err(err) => return Some(Err(err)),
                 };
-                // 2.2 If dir_entry has a read_children_path means we need to read a new
+                // 2.2 If dir_entry has a read_children means we need to read a new
                 // directory and push those results onto read_dir_results_stack
-                if dir_entry.read_children_path.is_some() {
+                if let Some(ref mut read_children) = dir_entry.read_children {
                     let iter = match self.read_dir_iter.as_mut().ok_or_else(Error::busy) {
                         Ok(iter) => iter,
                         Err(err) => return Some(Err(err)),
@@ -89,7 +89,7 @@ impl<C: ClientState> Iterator for DirEntryIter<C> {
                     if let Err(err) =
                         Self::push_next_read_dir_results(iter, &mut self.read_dir_results_stack)
                     {
-                        dir_entry.read_children_error = Some(err);
+                        read_children.error = Some(err);
                     }
                 }
 
