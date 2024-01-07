@@ -3,12 +3,12 @@ jwalk
 
 Filesystem walk.
 
-- Performed in parallel using rayon
+- Performed in parallel using Rayon
 - Entries streamed in sorted order 
 - Custom sort/filter/skip/state
 
-[![Build Status](https://travis-ci.org/Byron/jwalk.svg?branch=main)](https://travis-ci.org/Byron/jwalk)
-[![Latest version](http://meritbadge.herokuapp.com/jwalk)](https://crates.io/crates/jwalk)
+[![Build Status](https://github.com/Byron/jwalk/workflows/Rust/badge.svg)](https://github.com/Byron/jwalk/actions)
+[![Latest Version](https://img.shields.io/crates/v/jwalk.svg)](https://crates.io/crates/jwalk)
 
 ### Usage
 
@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jwalk = "0.5"
+jwalk = "0.6"
 ```
 
 Lean More: [docs.rs/jwalk](https://docs.rs/jwalk)
@@ -53,11 +53,11 @@ Directory traversal is already pretty fast. If you don't need this crate's speed
 then `walkdir` provides a smaller and more tested single threaded
 implementation.
 
-This crates parallelism happens at the directory level. It will help when
+This crate's parallelism happens at the directory level. It will help when
 walking deep file systems with many directories. It wont help when reading a
 single directory with many files.
 
 ### Benchmarks
 
-[Benchmarks](https://github.com/jessegrosjean/jwalk/blob/main/benches/benchmarks.md)
+[Benchmarks](https://github.com/Byron/jwalk/blob/main/benches/benchmarks.md)
 comparing this crate with `walkdir` and `ignore`.
