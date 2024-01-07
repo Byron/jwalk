@@ -1,4 +1,5 @@
 #![warn(clippy::all)]
+#![deny(rust_2018_idioms, missing_docs)]
 
 //! Filesystem walk.
 //!
@@ -143,7 +144,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir) callback.
 /// The type of ClientState is determined by WalkDirGeneric type parameter.
 pub trait ClientState: Send + Default + Debug + 'static {
+    /// The state held on directory level.
     type ReadDirState: Clone + Send + Default + Debug + 'static;
+    /// The state held for each entry of the directory.
     type DirEntryState: Send + Default + Debug + 'static;
 }
 

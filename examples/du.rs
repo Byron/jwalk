@@ -1,15 +1,18 @@
-extern crate jwalk;
+mod shared;
 
-use jwalk::{Parallelism, WalkDirGeneric};
-use std::env;
+use bytesize::ByteSize;
+use clap::Parser;
+use jwalk::WalkDirGeneric;
 
 fn main() {
-    let path = env::args().skip(1).next().unwrap_or("./".to_owned());
+    let args = shared::Args::parse();
     let mut total: u64 = 0;
 
+    let parallelism = args.parallelism();
+    let path = args.root.unwrap_or_else(|| ".".into());
     for dir_entry_result in WalkDirGeneric::<((), Option<u64>)>::new(&path)
         .skip_hidden(false)
-        .parallelism(Parallelism::RayonNewPool(4))
+        .parallelism(parallelism)
         .process_read_dir(|_, _, _, dir_entry_results| {
             dir_entry_results.iter_mut().for_each(|dir_entry_result| {
                 if let Ok(dir_entry) = dir_entry_result {
@@ -34,5 +37,5 @@ fn main() {
         }
     }
 
-    println!("path: {} total bytes: {}", path, total);
+    println!("path: {:?} total bytes: {}", path, ByteSize(total));
 }

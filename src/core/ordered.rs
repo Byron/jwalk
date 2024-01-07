@@ -28,7 +28,7 @@ impl<T> Eq for Ordered<T> {}
 
 impl<T> PartialOrd for Ordered<T> {
     fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-        self.index_path.partial_cmp(&o.index_path)
+        Some(self.index_path.cmp(&o.index_path))
     }
 }
 
