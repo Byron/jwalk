@@ -180,9 +180,9 @@ impl<C: ClientState> DirEntry<C> {
     /// [`std::fs::symlink_metadata`]: https://doc.rust-lang.org/stable/std/fs/fn.symlink_metadata.html
     pub fn metadata(&self) -> Result<fs::Metadata> {
         if self.follow_link {
-            fs::metadata(&self.path())
+            fs::metadata(self.path())
         } else {
-            fs::symlink_metadata(&self.path())
+            fs::symlink_metadata(self.path())
         }
         .map_err(|err| Error::from_entry(self, err))
     }

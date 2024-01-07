@@ -1030,7 +1030,7 @@ fn walk_relative_1() {
     let _shared = RELATIVE_MUTEX.lock().unwrap();
     let (test_dir, _temp_dir) = test_dir();
 
-    env::set_current_dir(&test_dir).unwrap();
+    env::set_current_dir(test_dir).unwrap();
 
     let paths = local_paths(WalkDir::new(".").sort(true));
 
@@ -1057,7 +1057,7 @@ fn walk_relative_2() {
     let _shared = RELATIVE_MUTEX.lock().unwrap();
     let (test_dir, _temp_dir) = test_dir();
 
-    env::set_current_dir(&test_dir.join("group 1")).unwrap();
+    env::set_current_dir(test_dir.join("group 1")).unwrap();
 
     let paths = local_paths(WalkDir::new("..").sort(true));
 
