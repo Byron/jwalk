@@ -14,7 +14,7 @@ use crate::ClientState;
 #[derive(Debug)]
 pub struct ReadDirSpec<C: ClientState> {
     /// Depth of the directory to read relative to root of walk.
-    pub depth: usize,
+    pub(crate) depth: usize,
     /// Path of the the directory to read.
     pub path: Arc<Path>,
     /// Client branch state that was set in the

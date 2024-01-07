@@ -62,7 +62,7 @@
 //!         children.iter_mut().for_each(|dir_entry_result| {
 //!             if let Ok(dir_entry) = dir_entry_result {
 //!                 if dir_entry.depth == 2 {
-//!                     dir_entry.read_children_path = None;
+//!                     dir_entry.read_children = None;
 //!                 }
 //!             }
 //!         });
@@ -126,7 +126,7 @@ use std::sync::Arc;
 
 use crate::core::{ReadDir, ReadDirSpec};
 
-pub use crate::core::{DirEntry, DirEntryIter, Error};
+pub use crate::core::{DirEntry, DirEntryIter, ReadChildren, Error};
 pub use rayon;
 
 /// Builder for walking a directory.
@@ -339,8 +339,8 @@ impl<C: ClientState> WalkDirGeneric<C> {
 
     /// A callback function to process (sort/filter/skip/state) each directory
     /// of entries before they are yielded. Modify the given array to
-    /// sort/filter entries. Use [`entry.read_children_path =
-    /// None`](struct.DirEntry.html#field.read_children_path) to yield a
+    /// sort/filter entries. Use [`entry.read_children =
+    /// None`](struct.DirEntry.html#field.read_children) to yield a
     /// directory entry but skip reading its contents. Use
     /// [`entry.client_state`](struct.DirEntry.html#field.client_state)
     /// to store custom state with an entry.
@@ -377,7 +377,7 @@ fn process_dir_entry_result<C: ClientState>(
                 let metadata = fs::metadata(dir_entry.path())
                     .map_err(|err| Error::from_path(0, dir_entry.path(), err))?;
                 if metadata.file_type().is_dir() {
-                    dir_entry.read_children_path = Some(Arc::from(dir_entry.path()));
+                    dir_entry.read_children = Some(ReadChildren::new(&dir_entry.path()));
                 }
             }
 

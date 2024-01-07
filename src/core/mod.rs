@@ -4,6 +4,7 @@ mod error;
 mod index_path;
 mod ordered;
 mod ordered_queue;
+mod read_children;
 mod read_dir;
 mod read_dir_iter;
 mod read_dir_spec;
@@ -23,6 +24,7 @@ use run_context::*;
 pub use dir_entry::DirEntry;
 pub use dir_entry_iter::DirEntryIter;
 pub use error::Error;
+pub use read_children::ReadChildren;
 pub use read_dir::ReadDir;
 pub use read_dir_spec::ReadDirSpec;
 
