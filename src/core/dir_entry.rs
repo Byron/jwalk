@@ -229,7 +229,7 @@ impl<C: ClientState> DirEntry<C> {
 }
 
 impl<C: ClientState> fmt::Debug for DirEntry<C> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "DirEntry({:?})", self.path())
     }
 }
