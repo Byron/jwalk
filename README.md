@@ -53,7 +53,7 @@ Directory traversal is already pretty fast. If you don't need this crate's speed
 then `walkdir` provides a smaller and more tested single threaded
 implementation.
 
-This crates parallelism happens at the directory level. It will help when
+This crate's parallelism happens at the directory level. It will help when
 walking deep file systems with many directories. It wont help when reading a
 single directory with many files.
 
