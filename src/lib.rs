@@ -158,7 +158,7 @@ pub trait ClientState: Send + Default + Debug + 'static {
 /// callback.
 ///
 /// Use [`WalkDir`](type.WalkDir.html) if you don't need to store client state
-/// into yeilded DirEntries.
+/// into yielded DirEntries.
 pub struct WalkDirGeneric<C: ClientState> {
     root: PathBuf,
     options: WalkDirOptions<C>,
