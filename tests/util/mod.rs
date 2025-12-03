@@ -7,11 +7,6 @@ use std::result;
 
 use jwalk::*;
 
-/// Helper to create a read-only fixture from a script
-pub fn fixture(script_name: &str) -> PathBuf {
-    gix_testtools::scripted_fixture_read_only(script_name).unwrap()
-}
-
 /// Returns representative parallelism options for testing
 pub fn parallelism_options() -> Vec<Parallelism> {
     vec![
@@ -50,17 +45,20 @@ impl ReadOnlyDir {
     }
 
     /// Return the path to this directory.
+
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Return a path joined to the path to this directory.
+
     pub fn join<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         self.path.join(path)
     }
 
     /// Run the given iterator and return the result as a distinct collection
     /// of directory entries and errors.
+
     pub fn run_recursive<C, I>(&self, it: I) -> RecursiveResults<C>
     where
         C: ClientState,
@@ -88,11 +86,9 @@ macro_rules! err {
     }
 }
 
-/// A convenient result type alias.
-pub type Result<T> = result::Result<T, Box<dyn error::Error + Send + Sync>>;
-
 /// The result of running a recursive directory iterator on a single directory.
 #[derive(Debug)]
+
 pub struct RecursiveResults<C: ClientState> {
     ents: Vec<DirEntry<C>>,
     errs: Vec<Error>,
@@ -100,11 +96,13 @@ pub struct RecursiveResults<C: ClientState> {
 
 impl<C: ClientState> RecursiveResults<C> {
     /// Return all of the errors encountered during traversal.
+
     pub fn errs(&self) -> &[Error] {
         &self.errs
     }
 
     /// Assert that no errors have occurred.
+
     pub fn assert_no_errors(&self) {
         assert!(
             self.errs.is_empty(),
@@ -115,6 +113,7 @@ impl<C: ClientState> RecursiveResults<C> {
 
     /// Return all the successfully retrieved directory entries in the order
     /// in which they were retrieved.
+
     pub fn ents(&self) -> &[DirEntry<C>] {
         &self.ents
     }
@@ -122,6 +121,7 @@ impl<C: ClientState> RecursiveResults<C> {
     /// Return all paths from all successfully retrieved directory entries.
     ///
     /// This does not include paths that correspond to an error.
+
     pub fn paths(&self) -> Vec<PathBuf> {
         self.ents.iter().map(|d| d.path()).collect()
     }
@@ -149,29 +149,34 @@ impl<C: ClientState> RecursiveResults<C> {
 /// When manipulating paths within this directory, paths are interpreted
 /// relative to this directory.
 #[derive(Debug)]
+
 pub struct Dir {
     dir: TempDir,
 }
 
 impl Dir {
     /// Create a new empty temporary directory.
+
     pub fn tmp() -> Dir {
         let dir = TempDir::new().unwrap();
         Dir { dir }
     }
 
     /// Return the path to this directory.
+
     pub fn path(&self) -> &Path {
         self.dir.path()
     }
 
     /// Return a path joined to the path to this directory.
+
     pub fn join<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         self.path().join(path)
     }
 
     /// Run the given iterator and return the result as a distinct collection
     /// of directory entries and errors.
+
     pub fn run_recursive<C, I>(&self, it: I) -> RecursiveResults<C>
     where
         C: ClientState,
@@ -192,6 +197,7 @@ impl Dir {
 
     /// Create a directory at the given path, while creating all intermediate
     /// directories as needed.
+
     pub fn mkdirp<P: AsRef<Path>>(&self, path: P) {
         let full = self.join(path);
         fs::create_dir_all(&full)
@@ -201,6 +207,7 @@ impl Dir {
 
     /// Create an empty file at the given path. All ancestor directories must
     /// already exists.
+
     pub fn touch<P: AsRef<Path>>(&self, path: P) {
         let full = self.join(path);
         File::create(&full)
@@ -208,42 +215,8 @@ impl Dir {
             .unwrap();
     }
 
-    /// Create empty files at the given paths. All ancestor directories must
-    /// already exists.
-    pub fn touch_all<P: AsRef<Path>>(&self, paths: &[P]) {
-        for p in paths {
-            self.touch(p);
-        }
-    }
-
-    /// Create a file symlink to the given src with the given link name.
-    pub fn symlink_file<P1: AsRef<Path>, P2: AsRef<Path>>(&self, src: P1, link_name: P2) {
-        #[cfg(windows)]
-        fn imp(src: &Path, link_name: &Path) -> io::Result<()> {
-            use std::os::windows::fs::symlink_file;
-            symlink_file(src, link_name)
-        }
-
-        #[cfg(unix)]
-        fn imp(src: &Path, link_name: &Path) -> io::Result<()> {
-            use std::os::unix::fs::symlink;
-            symlink(src, link_name)
-        }
-
-        let (src, link_name) = (self.join(src), self.join(link_name));
-        imp(&src, &link_name)
-            .map_err(|e| {
-                err!(
-                    "failed to symlink file {} with target {}: {}",
-                    src.display(),
-                    link_name.display(),
-                    e
-                )
-            })
-            .unwrap()
-    }
-
     /// Create a directory symlink to the given src with the given link name.
+
     pub fn symlink_dir<P1: AsRef<Path>, P2: AsRef<Path>>(&self, src: P1, link_name: P2) {
         #[cfg(windows)]
         fn imp(src: &Path, link_name: &Path) -> io::Result<()> {
@@ -277,6 +250,7 @@ impl Dir {
 /// We use this in lieu of tempfile because tempfile brings in too many
 /// dependencies.
 #[derive(Debug)]
+
 pub struct TempDir(PathBuf);
 
 impl Drop for TempDir {
@@ -288,12 +262,13 @@ impl Drop for TempDir {
 impl TempDir {
     /// Create a new empty temporary directory under the system's configured
     /// temporary directory.
-    pub fn new() -> Result<TempDir> {
-        #[allow(deprecated)]
+
+    pub fn new() -> result::Result<TempDir, Box<dyn error::Error + Send + Sync>> {
+        #[expect(deprecated)]
         use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 
         static TRIES: usize = 100;
-        #[allow(deprecated)]
+        #[expect(deprecated)]
         static COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
 
         let tmpdir = env::temp_dir();
@@ -311,6 +286,7 @@ impl TempDir {
     }
 
     /// Return the underlying path to this temporary directory.
+
     pub fn path(&self) -> &Path {
         &self.0
     }

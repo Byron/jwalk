@@ -113,21 +113,25 @@
 //! Wraps a `ReadDirIter` and yields individual `DirEntry` results in strict
 //! depth first order.
 
-mod core;
-
-use rayon::{ThreadPool, ThreadPoolBuilder};
-use std::cmp::Ordering;
+use rayon::ThreadPool;
 use std::default::Default;
-use std::ffi::OsStr;
 use std::fmt::Debug;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::core::{ReadDir, ReadDirSpec};
+mod dir_entry;
+mod dir_entry_iter;
+mod error;
+mod read_children;
 
-pub use crate::core::{DirEntry, DirEntryIter, ReadChildren, Error};
+pub use dir_entry::DirEntry;
+pub use dir_entry_iter::DirEntryIter;
+pub use error::Error;
+pub use read_children::ReadChildren;
+
 pub use rayon;
+
+use dir_entry_iter::WalkDirOptions;
 
 /// Builder for walking a directory.
 pub type WalkDir = WalkDirGeneric<((), ())>;
@@ -145,10 +149,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The type of ClientState is determined by WalkDirGeneric type parameter.
 pub trait ClientState: Send + Default + Debug + 'static {
     /// The state held on directory level.
-    type ReadDirState: Clone + Send + Default + Debug + 'static;
+    type ReadDirState: Clone + Send + Sync + Default + Debug + 'static;
     /// The state held for each entry of the directory.
-    type DirEntryState: Send + Default + Debug + 'static;
+    type DirEntryState: Send + Sync + Default + Debug + 'static;
 }
+
+
 
 /// Generic builder for walking a directory.
 ///
@@ -159,15 +165,11 @@ pub trait ClientState: Send + Default + Debug + 'static {
 ///
 /// Use [`WalkDir`](type.WalkDir.html) if you don't need to store client state
 /// into yielded DirEntries.
+#[expect(dead_code)]
 pub struct WalkDirGeneric<C: ClientState> {
     root: PathBuf,
     options: WalkDirOptions<C>,
 }
-
-type ProcessReadDirFunction<C> = dyn Fn(Option<usize>, &Path, &mut <C as ClientState>::ReadDirState, &mut Vec<Result<DirEntry<C>>>)
-    + Send
-    + Sync
-    + 'static;
 
 /// Degree of parallelism to use when performing walk.
 ///
@@ -201,17 +203,6 @@ pub enum Parallelism {
     RayonNewPool(usize),
 }
 
-struct WalkDirOptions<C: ClientState> {
-    sort: bool,
-    min_depth: usize,
-    max_depth: usize,
-    skip_hidden: bool,
-    follow_links: bool,
-    parallelism: Parallelism,
-    root_read_dir_state: C::ReadDirState,
-    process_read_dir: Option<Arc<ProcessReadDirFunction<C>>>,
-}
-
 impl<C: ClientState> WalkDirGeneric<C> {
     /// Create a builder for a recursive directory iterator starting at the file
     /// path root. If root is a directory, then it is the first item yielded by
@@ -227,7 +218,7 @@ impl<C: ClientState> WalkDirGeneric<C> {
             options: WalkDirOptions {
                 sort: false,
                 min_depth: 0,
-                max_depth: ::std::usize::MAX,
+                max_depth: std::usize::MAX,
                 skip_hidden: true,
                 follow_links: false,
                 parallelism: Parallelism::RayonDefaultPool {
@@ -241,12 +232,7 @@ impl<C: ClientState> WalkDirGeneric<C> {
 
     /// Try to create an iterator or fail if the rayon threadpool (in any configuration) is busy.
     pub fn try_into_iter(self) -> Result<DirEntryIter<C>> {
-        let iter = self.into_iter();
-        if iter.read_dir_iter.is_none() {
-            Err(Error::busy())
-        } else {
-            Ok(iter)
-        }
+        DirEntryIter::new(self.root, self.options)
     }
 
     /// Root path of the walk.
@@ -313,11 +299,8 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// exceeded.
     pub fn max_depth(mut self, depth: usize) -> Self {
         self.options.max_depth = depth;
-        if self.options.max_depth < self.options.min_depth {
-            self.options.max_depth = self.options.min_depth;
-        }
-        if self.options.max_depth < 2 {
-            self.options.parallelism = Parallelism::Serial;
+        if self.options.min_depth > self.options.max_depth {
+            self.options.min_depth = self.options.max_depth;
         }
         self
     }
@@ -356,210 +339,19 @@ impl<C: ClientState> WalkDirGeneric<C> {
     }
 }
 
-fn process_dir_entry_result<C: ClientState>(
-    dir_entry_result: Result<DirEntry<C>>,
-    follow_links: bool,
-) -> Result<DirEntry<C>> {
-    match dir_entry_result {
-        Ok(mut dir_entry) => {
-            if follow_links && dir_entry.file_type.is_symlink() {
-                dir_entry = dir_entry.follow_symlink()?;
-            }
-
-            if dir_entry.depth == 0 && dir_entry.file_type.is_symlink() {
-                // As a special case, if we are processing a root entry, then we
-                // always follow it even if it's a symlink and follow_links is
-                // false. We are careful to not let this change the semantics of
-                // the DirEntry however. Namely, the DirEntry should still
-                // respect the follow_links setting. When it's disabled, it
-                // should report itself as a symlink. When it's enabled, it
-                // should always report itself as the target.
-                let metadata = fs::metadata(dir_entry.path())
-                    .map_err(|err| Error::from_path(0, dir_entry.path(), err))?;
-                if metadata.file_type().is_dir() {
-                    dir_entry.read_children = Some(ReadChildren::new(&dir_entry.path()));
-                }
-            }
-
-            Ok(dir_entry)
-        }
-        Err(err) => Err(err),
-    }
-}
-
 impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
     type Item = Result<DirEntry<C>>;
     type IntoIter = DirEntryIter<C>;
 
     fn into_iter(self) -> DirEntryIter<C> {
-        let sort = self.options.sort;
-        let max_depth = self.options.max_depth;
-        let min_depth = self.options.min_depth;
-        let parallelism = self.options.parallelism;
-        let skip_hidden = self.options.skip_hidden;
-        let follow_links = self.options.follow_links;
-        let process_read_dir = self.options.process_read_dir.clone();
-        let mut root_read_dir_state = self.options.root_read_dir_state;
-        let follow_link_ancestors = if follow_links {
-            Arc::new(vec![Arc::from(self.root.clone()) as Arc<Path>])
-        } else {
-            Arc::new(vec![])
-        };
-
-        let root_entry = DirEntry::from_path(0, &self.root, false, follow_link_ancestors);
-        let root_parent_path = root_entry
-            .as_ref()
-            .map(|root| root.parent_path().to_owned())
-            .unwrap_or_default();
-        let mut root_entry_results = vec![process_dir_entry_result(root_entry, follow_links)];
-        if let Some(process_read_dir) = process_read_dir.as_ref() {
-            process_read_dir(
-                None,
-                &root_parent_path,
-                &mut root_read_dir_state,
-                &mut root_entry_results,
-            );
-        }
-
-        DirEntryIter::new(
-            root_entry_results,
-            parallelism,
-            min_depth,
-            root_read_dir_state,
-            Arc::new(move |read_dir_spec| {
-                let ReadDirSpec {
-                    path,
-                    depth,
-                    mut client_read_state,
-                    mut follow_link_ancestors,
-                } = read_dir_spec;
-
-                let read_dir_depth = depth;
-                let read_dir_contents_depth = depth + 1;
-
-                if read_dir_contents_depth > max_depth {
-                    return Ok(ReadDir::new(client_read_state, Vec::new()));
-                }
-
-                follow_link_ancestors = if follow_links {
-                    let mut ancestors = Vec::with_capacity(follow_link_ancestors.len() + 1);
-                    ancestors.extend(follow_link_ancestors.iter().cloned());
-                    ancestors.push(path.clone());
-                    Arc::new(ancestors)
-                } else {
-                    follow_link_ancestors
-                };
-
-                let mut dir_entry_results: Vec<_> = fs::read_dir(path.as_ref())
-                    .map_err(|err| Error::from_path(0, path.to_path_buf(), err))?
-                    .filter_map(|dir_entry_result| {
-                        let fs_dir_entry = match dir_entry_result {
-                            Ok(fs_dir_entry) => fs_dir_entry,
-                            Err(err) => {
-                                return Some(Err(Error::from_io(read_dir_contents_depth, err)))
-                            }
-                        };
-
-                        let dir_entry = match DirEntry::from_entry(
-                            read_dir_contents_depth,
-                            path.clone(),
-                            &fs_dir_entry,
-                            follow_link_ancestors.clone(),
-                        ) {
-                            Ok(dir_entry) => dir_entry,
-                            Err(err) => return Some(Err(err)),
-                        };
-
-                        if skip_hidden && is_hidden(&dir_entry.file_name) {
-                            return None;
-                        }
-
-                        Some(process_dir_entry_result(Ok(dir_entry), follow_links))
-                    })
-                    .collect();
-
-                if sort {
-                    dir_entry_results.sort_by(|a, b| match (a, b) {
-                        (Ok(a), Ok(b)) => a.file_name.cmp(&b.file_name),
-                        (Ok(_), Err(_)) => Ordering::Less,
-                        (Err(_), Ok(_)) => Ordering::Greater,
-                        (Err(_), Err(_)) => Ordering::Equal,
-                    });
-                }
-
-                if let Some(process_read_dir) = process_read_dir.as_ref() {
-                    process_read_dir(
-                        Some(read_dir_depth),
-                        path.as_ref(),
-                        &mut client_read_state,
-                        &mut dir_entry_results,
-                    );
-                }
-
-                Ok(ReadDir::new(client_read_state, dir_entry_results))
-            }),
-        )
+        self.try_into_iter().unwrap_or_else(|e| DirEntryIter::with_error(e))
     }
-}
-
-impl<C: ClientState> Clone for WalkDirOptions<C> {
-    fn clone(&self) -> WalkDirOptions<C> {
-        WalkDirOptions {
-            sort: false,
-            min_depth: self.min_depth,
-            max_depth: self.max_depth,
-            skip_hidden: self.skip_hidden,
-            follow_links: self.follow_links,
-            parallelism: self.parallelism.clone(),
-            root_read_dir_state: self.root_read_dir_state.clone(),
-            process_read_dir: self.process_read_dir.clone(),
-        }
-    }
-}
-
-impl Parallelism {
-    pub(crate) fn spawn<OP>(&self, op: OP)
-    where
-        OP: FnOnce() + Send + 'static,
-    {
-        match self {
-            Parallelism::Serial => op(),
-            Parallelism::RayonDefaultPool { .. } => rayon::spawn(op),
-            Parallelism::RayonNewPool(num_threads) => {
-                let mut thread_pool = ThreadPoolBuilder::new();
-                if *num_threads > 0 {
-                    thread_pool = thread_pool.num_threads(*num_threads);
-                }
-                if let Ok(thread_pool) = thread_pool.build() {
-                    thread_pool.spawn(op);
-                } else {
-                    rayon::spawn(op);
-                }
-            }
-            Parallelism::RayonExistingPool { pool, .. } => pool.spawn(op),
-        }
-    }
-
-    pub(crate) fn timeout(&self) -> Option<std::time::Duration> {
-        match self {
-            Parallelism::Serial | Parallelism::RayonNewPool(_) => None,
-            Parallelism::RayonDefaultPool { busy_timeout } => Some(*busy_timeout),
-            Parallelism::RayonExistingPool { busy_timeout, .. } => *busy_timeout,
-        }
-    }
-}
-
-fn is_hidden(file_name: &OsStr) -> bool {
-    file_name
-        .to_str()
-        .map(|s| s.starts_with('.'))
-        .unwrap_or(false)
 }
 
 impl<B, E> ClientState for (B, E)
 where
-    B: Clone + Send + Default + Debug + 'static,
-    E: Send + Default + Debug + 'static,
+    B: Clone + Send + Sync + Default + Debug + 'static,
+    E: Send + Sync + Default + Debug + 'static,
 {
     type ReadDirState = B;
     type DirEntryState = E;
