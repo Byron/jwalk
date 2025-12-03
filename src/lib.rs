@@ -131,6 +131,8 @@ pub use read_children::ReadChildren;
 
 pub use rayon;
 
+use dir_entry_iter::WalkDirOptions;
+
 /// Builder for walking a directory.
 pub type WalkDir = WalkDirGeneric<((), ())>;
 
@@ -147,10 +149,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The type of ClientState is determined by WalkDirGeneric type parameter.
 pub trait ClientState: Send + Default + Debug + 'static {
     /// The state held on directory level.
-    type ReadDirState: Clone + Send + Default + Debug + 'static;
+    type ReadDirState: Clone + Send + Sync + Default + Debug + 'static;
     /// The state held for each entry of the directory.
-    type DirEntryState: Send + Default + Debug + 'static;
+    type DirEntryState: Send + Sync + Default + Debug + 'static;
 }
+
+
 
 /// Generic builder for walking a directory.
 ///
@@ -164,7 +168,7 @@ pub trait ClientState: Send + Default + Debug + 'static {
 #[expect(dead_code)]
 pub struct WalkDirGeneric<C: ClientState> {
     root: PathBuf,
-    _phantom: std::marker::PhantomData<C>,
+    options: WalkDirOptions<C>,
 }
 
 /// Degree of parallelism to use when performing walk.
@@ -208,30 +212,46 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// Note that his iterator can fail on the first element if `into_iter()` is used as it
     /// has to be infallible. Use [`try_into_iter()`][WalkDirGeneric::try_into_iter()]
     /// instead for error handling.
-    pub fn new<P: AsRef<Path>>(_root: P) -> Self {
-        todo!()
+    pub fn new<P: AsRef<Path>>(root: P) -> Self {
+        WalkDirGeneric {
+            root: root.as_ref().to_path_buf(),
+            options: WalkDirOptions {
+                sort: false,
+                min_depth: 0,
+                max_depth: std::usize::MAX,
+                skip_hidden: true,
+                follow_links: false,
+                parallelism: Parallelism::RayonDefaultPool {
+                    busy_timeout: std::time::Duration::from_secs(1),
+                },
+                root_read_dir_state: C::ReadDirState::default(),
+                process_read_dir: None,
+            },
+        }
     }
 
     /// Try to create an iterator or fail if the rayon threadpool (in any configuration) is busy.
     pub fn try_into_iter(self) -> Result<DirEntryIter<C>> {
-        todo!()
+        DirEntryIter::new(self.root, self.options)
     }
 
     /// Root path of the walk.
     pub fn root(&self) -> &Path {
-        todo!()
+        &self.root
     }
 
     /// Sort entries by `file_name` per directory. Defaults to `false`. Use
     /// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir) for custom
     /// sorting or filtering.
-    pub fn sort(self, _sort: bool) -> Self {
-        todo!()
+    pub fn sort(mut self, sort: bool) -> Self {
+        self.options.sort = sort;
+        self
     }
 
     /// Skip hidden entries. Enabled by default.
-    pub fn skip_hidden(self, _skip_hidden: bool) -> Self {
-        todo!()
+    pub fn skip_hidden(mut self, skip_hidden: bool) -> Self {
+        self.options.skip_hidden = skip_hidden;
+        self
     }
 
     /// Follow symbolic links. By default, this is disabled.
@@ -245,8 +265,9 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// type for more details.
     ///
     /// [`DirEntry`]: struct.DirEntry.html
-    pub fn follow_links(self, _follow_links: bool) -> Self {
-        todo!()
+    pub fn follow_links(mut self, follow_links: bool) -> Self {
+        self.options.follow_links = follow_links;
+        self
     }
 
     /// Set the minimum depth of entries yielded by the iterator.
@@ -254,8 +275,12 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// The smallest depth is `0` and always corresponds to the path given
     /// to the `new` function on this type. Its direct descendents have depth
     /// `1`, and their descendents have depth `2`, and so on.
-    pub fn min_depth(self, _depth: usize) -> Self {
-        todo!()
+    pub fn min_depth(mut self, depth: usize) -> Self {
+        self.options.min_depth = depth;
+        if self.options.min_depth > self.options.max_depth {
+            self.options.min_depth = self.options.max_depth;
+        }
+        self
     }
 
     /// Set the maximum depth of entries yield by the iterator.
@@ -272,21 +297,27 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// Note that this will not simply filter the entries of the iterator, but
     /// it will actually avoid descending into directories when the depth is
     /// exceeded.
-    pub fn max_depth(self, _depth: usize) -> Self {
-        todo!()
+    pub fn max_depth(mut self, depth: usize) -> Self {
+        self.options.max_depth = depth;
+        if self.options.min_depth > self.options.max_depth {
+            self.options.min_depth = self.options.max_depth;
+        }
+        self
     }
 
     /// Degree of parallelism to use when performing walk. Defaults to
     /// [`Parallelism::RayonDefaultPool`](enum.Parallelism.html#variant.RayonDefaultPool).
-    pub fn parallelism(self, _parallelism: Parallelism) -> Self {
-        todo!()
+    pub fn parallelism(mut self, parallelism: Parallelism) -> Self {
+        self.options.parallelism = parallelism;
+        self
     }
 
     /// Initial ClientState::ReadDirState that is passed to
     /// [`process_read_dir`](struct.WalkDirGeneric.html#method.process_read_dir)
     /// when processing root. Defaults to ClientState::ReadDirState::default().
-    pub fn root_read_dir_state(self, _read_dir_state: C::ReadDirState) -> Self {
-        todo!()
+    pub fn root_read_dir_state(mut self, read_dir_state: C::ReadDirState) -> Self {
+        self.options.root_read_dir_state = read_dir_state;
+        self
     }
 
     /// A callback function to process (sort/filter/skip/state) each directory
@@ -296,14 +327,15 @@ impl<C: ClientState> WalkDirGeneric<C> {
     /// directory entry but skip reading its contents. Use
     /// [`entry.client_state`](struct.DirEntry.html#field.client_state)
     /// to store custom state with an entry.
-    pub fn process_read_dir<F>(self, _process_by: F) -> Self
+    pub fn process_read_dir<F>(mut self, process_by: F) -> Self
     where
         F: Fn(Option<usize>, &Path, &mut C::ReadDirState, &mut Vec<Result<DirEntry<C>>>)
             + Send
             + Sync
             + 'static,
     {
-        todo!()
+        self.options.process_read_dir = Some(Arc::new(process_by));
+        self
     }
 }
 
@@ -312,14 +344,14 @@ impl<C: ClientState> IntoIterator for WalkDirGeneric<C> {
     type IntoIter = DirEntryIter<C>;
 
     fn into_iter(self) -> DirEntryIter<C> {
-        todo!()
+        self.try_into_iter().unwrap_or_else(|e| DirEntryIter::with_error(e))
     }
 }
 
 impl<B, E> ClientState for (B, E)
 where
-    B: Clone + Send + Default + Debug + 'static,
-    E: Send + Default + Debug + 'static,
+    B: Clone + Send + Sync + Default + Debug + 'static,
+    E: Send + Sync + Default + Debug + 'static,
 {
     type ReadDirState = B;
     type DirEntryState = E;

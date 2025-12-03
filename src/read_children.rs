@@ -18,9 +18,19 @@ pub struct ReadChildren<C: ClientState> {
     pub client_read_state: Option<C::ReadDirState>,
 }
 
+impl<C: ClientState> Clone for ReadChildren<C> {
+    fn clone(&self) -> Self {
+        ReadChildren {
+            path: self.path.clone(),
+            error: self.error.clone(),
+            client_read_state: self.client_read_state.clone(),
+        }
+    }
+}
+
 impl<C: ClientState> ReadChildren<C> {
     /// Return the error stored that occurred when reading the directory.
     pub fn error(&self) -> Option<&Error> {
-        todo!()
+        self.error.as_ref()
     }
 }

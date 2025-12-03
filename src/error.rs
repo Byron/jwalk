@@ -2,6 +2,7 @@ use std::error;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 
 
@@ -24,19 +25,19 @@ use std::path::{Path, PathBuf};
 /// [`std::io::Error`]: https://doc.rust-lang.org/stable/std/io/struct.Error.html
 /// [`io::Result`]: https://doc.rust-lang.org/stable/std/io/type.Result.html
 /// [impl]: struct.Error.html#impl-From%3CError%3E
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[expect(dead_code)]
 pub struct Error {
     depth: usize,
     inner: ErrorInner,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[expect(dead_code)]
 enum ErrorInner {
     Io {
         path: Option<PathBuf>,
-        err: io::Error,
+        err: Arc<io::Error>,
     },
     Loop {
         ancestor: PathBuf,
@@ -46,6 +47,40 @@ enum ErrorInner {
 }
 
 impl Error {
+    pub(crate) fn from_path(depth: usize, pb: PathBuf, err: io::Error) -> Self {
+        Error {
+            depth,
+            inner: ErrorInner::Io {
+                path: Some(pb),
+                err: Arc::new(err),
+            },
+        }
+    }
+
+    pub(crate) fn from_io(depth: usize, err: io::Error) -> Self {
+        Error {
+            depth,
+            inner: ErrorInner::Io {
+                path: None,
+                err: Arc::new(err),
+            },
+        }
+    }
+
+    pub(crate) fn from_loop(depth: usize, ancestor: PathBuf, child: PathBuf) -> Self {
+        Error {
+            depth,
+            inner: ErrorInner::Loop { ancestor, child },
+        }
+    }
+
+    pub(crate) fn busy() -> Self {
+        Error {
+            depth: 0,
+            inner: ErrorInner::ThreadpoolBusy,
+        }
+    }
+
     /// Returns the path associated with this error if one exists.
     ///
     /// For example, if an error occurred while opening a directory handle,
@@ -53,7 +88,11 @@ impl Error {
     ///
     /// [`std::fs::read_dir`]: https://doc.rust-lang.org/stable/std/fs/fn.read_dir.html
     pub fn path(&self) -> Option<&Path> {
-        todo!()
+        match &self.inner {
+            ErrorInner::Io { path, .. } => path.as_ref().map(|p| p.as_path()),
+            ErrorInner::Loop { child, .. } => Some(child.as_path()),
+            ErrorInner::ThreadpoolBusy => None,
+        }
     }
 
     /// Returns the path at which a cycle was detected.
@@ -69,7 +108,10 @@ impl Error {
     /// [`None`]: https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.None
     /// [`path`]: struct.Error.html#path
     pub fn loop_ancestor(&self) -> Option<&Path> {
-        todo!()
+        match &self.inner {
+            ErrorInner::Loop { ancestor, .. } => Some(ancestor.as_path()),
+            _ => None,
+        }
     }
 
     /// Returns the depth at which this error occurred relative to the root.
@@ -81,7 +123,7 @@ impl Error {
     /// [`new`]: struct.WalkDir.html#method.new
     /// [`WalkDir`]: struct.WalkDir.html
     pub fn depth(&self) -> usize {
-        todo!()
+        self.depth
     }
 
     /// Inspect the original [`io::Error`] if there is one.
@@ -143,14 +185,17 @@ impl Error {
     /// [`into_io_error`]: struct.Error.html#method.into_io_error
     /// [impl]: struct.Error.html#impl-From%3CError%3E
     pub fn io_error(&self) -> Option<&io::Error> {
-        todo!()
+        match &self.inner {
+            ErrorInner::Io { err, .. } => Some(err),
+            _ => None,
+        }
     }
 
     /// Returns true if this error is due to a busy thread-pool that prevented its effective use.
     ///
     /// Note that business detection is timeout based, and we don't know if it would have been a deadlock or not.
     pub fn is_busy(&self) -> bool {
-        todo!()
+        matches!(&self.inner, ErrorInner::ThreadpoolBusy)
     }
 
     /// Similar to [`io_error`] except consumes self to convert to the original
@@ -159,29 +204,58 @@ impl Error {
     /// [`io_error`]: struct.Error.html#method.io_error
     /// [`io::Error`]: https://doc.rust-lang.org/stable/std/io/struct.Error.html
     pub fn into_io_error(self) -> Option<io::Error> {
-        todo!()
+        match self.inner {
+            ErrorInner::Io { err, .. } => {
+                Some(Arc::try_unwrap(err).unwrap_or_else(|arc| {
+                    io::Error::new(arc.kind(), format!("{}", arc))
+                }))
+            }
+            _ => None,
+        }
     }
-
-
 }
 
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        todo!()
+        self.io_error().map(|e| e as &(dyn error::Error + 'static))
     }
 
+    #[allow(deprecated)]
     fn description(&self) -> &str {
-        todo!()
+        match &self.inner {
+            ErrorInner::Io { err, .. } => err.description(),
+            ErrorInner::Loop { .. } => "filesystem loop found",
+            ErrorInner::ThreadpoolBusy => "threadpool is busy",
+        }
     }
 
+    #[allow(deprecated)]
     fn cause(&self) -> Option<&dyn error::Error> {
-        todo!()
+        self.source()
     }
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.inner {
+            ErrorInner::Io { path: Some(path), err } => {
+                write!(f, "IO error for {}: {}", path.display(), err)
+            }
+            ErrorInner::Io { path: None, err } => {
+                write!(f, "IO error: {}", err)
+            }
+            ErrorInner::Loop { child, ancestor } => {
+                write!(
+                    f,
+                    "filesystem loop found: {} points to ancestor {}",
+                    child.display(),
+                    ancestor.display()
+                )
+            }
+            ErrorInner::ThreadpoolBusy => {
+                write!(f, "threadpool is busy")
+            }
+        }
     }
 }
 
@@ -197,7 +271,15 @@ impl From<Error> for io::Error {
     /// [`io::Error`]: https://doc.rust-lang.org/stable/std/io/struct.Error.html
     /// ["inner error"]: https://doc.rust-lang.org/std/io/struct.Error.html#method.into_inner
     /// [`into_io_error`]: struct.WalkDir.html#method.into_io_error
-    fn from(_walk_err: Error) -> io::Error {
-        todo!()
+    fn from(walk_err: Error) -> io::Error {
+        match walk_err.inner {
+            ErrorInner::Io { err, .. } => {
+                Arc::try_unwrap(err).unwrap_or_else(|arc| {
+                    io::Error::new(arc.kind(), format!("{}", arc))
+                })
+            }
+            ErrorInner::Loop { .. } => io::Error::new(io::ErrorKind::Other, walk_err),
+            ErrorInner::ThreadpoolBusy => io::Error::new(io::ErrorKind::WouldBlock, walk_err),
+        }
     }
 }

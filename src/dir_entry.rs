@@ -4,7 +4,7 @@ use std::fs::{self, FileType};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::{ClientState, ReadChildren, Result};
+use crate::{ClientState, Error, ReadChildren, Result};
 
 /// Representation of a file or directory.
 ///
@@ -32,15 +32,31 @@ pub struct DirEntry<C: ClientState> {
     /// callback may set this field to `None` to skip reading the
     /// contents of a particular directory.
     pub read_children: Option<ReadChildren<C>>,
-    // True if [`follow_links`] is `true` AND was created from a symlink path.
-    follow_link: bool,
+    // True if the original path was a symlink
+    pub(crate) follow_link: bool,
+    // True if we actually followed the symlink (follow_links was enabled)
+    pub(crate) followed_link: bool,
     // Origins of symlinks followed to get to this entry.
-    follow_link_ancestors: Arc<Vec<Arc<Path>>>,
+    pub(crate) follow_link_ancestors: Arc<Vec<Arc<Path>>>,
+}
+
+impl<C: ClientState> Clone for DirEntry<C> {
+    fn clone(&self) -> Self {
+        DirEntry {
+            depth: self.depth,
+            file_name: self.file_name.clone(),
+            file_type: self.file_type,
+            client_state: C::DirEntryState::default(),
+            parent_path: self.parent_path.clone(),
+            read_children: self.read_children.clone(),
+            follow_link: self.follow_link,
+            followed_link: self.followed_link,
+            follow_link_ancestors: self.follow_link_ancestors.clone(),
+        }
+    }
 }
 
 impl<C: ClientState> DirEntry<C> {
-
-
     /// Return the file type for the file that this entry points to.
     ///
     /// If this is a symbolic link and [`follow_links`] is `true`, then this
@@ -50,7 +66,7 @@ impl<C: ClientState> DirEntry<C> {
     ///
     /// [`follow_links`]: struct.WalkDir.html#method.follow_links
     pub fn file_type(&self) -> FileType {
-        todo!()
+        self.file_type
     }
 
     /// Return the file name of this entry.
@@ -58,7 +74,7 @@ impl<C: ClientState> DirEntry<C> {
     /// If this entry has no file name (e.g., `/`), then the full path is
     /// returned.
     pub fn file_name(&self) -> &OsStr {
-        todo!()
+        &self.file_name
     }
 
     /// Returns the depth at which this entry was created relative to the root.
@@ -67,14 +83,14 @@ impl<C: ClientState> DirEntry<C> {
     /// to the `new` function on `WalkDir`. Its direct descendants have depth
     /// `1`, and their descendants have depth `2`, and so on.
     pub fn depth(&self) -> usize {
-        todo!()
+        self.depth
     }
 
     /// Path to the file/directory represented by this entry.
     ///
     /// The path is created by joining `parent_path` with `file_name`.
     pub fn path(&self) -> PathBuf {
-        todo!()
+        self.parent_path.join(&self.file_name)
     }
 
     /// Returns `true` if and only if this entry was created from a symbolic
@@ -88,7 +104,7 @@ impl<C: ClientState> DirEntry<C> {
     /// [`follow_links`]: struct.WalkDir.html#method.follow_links
     /// [`std::fs::read_link(entry.path())`]: https://doc.rust-lang.org/stable/std/fs/fn.read_link.html
     pub fn path_is_symlink(&self) -> bool {
-        todo!()
+        self.follow_link
     }
 
     /// Return the metadata for the file that this entry points to.
@@ -114,19 +130,29 @@ impl<C: ClientState> DirEntry<C> {
     /// [`std::fs::metadata`]: https://doc.rust-lang.org/std/fs/fn.metadata.html
     /// [`std::fs::symlink_metadata`]: https://doc.rust-lang.org/stable/std/fs/fn.symlink_metadata.html
     pub fn metadata(&self) -> Result<fs::Metadata> {
-        todo!()
+        let path = self.path();
+        // If we followed the link during traversal, also follow it here
+        if self.followed_link {
+            fs::metadata(&path)
+        } else {
+            fs::symlink_metadata(&path)
+        }
+        .map_err(|e| Error::from_path(self.depth, path, e))
     }
 
     /// Reference to the path of the directory containing this entry.
     pub fn parent_path(&self) -> &Path {
-        todo!()
+        &self.parent_path
     }
-
-
 }
 
 impl<C: ClientState> fmt::Debug for DirEntry<C> {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DirEntry")
+            .field("depth", &self.depth)
+            .field("file_name", &self.file_name)
+            .field("file_type", &self.file_type)
+            .field("parent_path", &self.parent_path)
+            .finish()
     }
 }
