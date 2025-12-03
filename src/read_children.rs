@@ -7,10 +7,10 @@ use crate::{ClientState, Error};
 pub struct ReadChildren<C: ClientState> {
     /// Path that will be used to read child entries. This is
     /// automatically set for directories.
-    pub(crate) path: Arc<Path>,
+    pub path: Arc<Path>,
     /// If the resulting `fs::read_dir` generates an error
     /// then that error is stored here.
-    pub(crate) error: Option<Error>,
+    pub error: Option<Error>,
     /// Use this to customize the ReadDirState passed to the next
     /// process_read_dir.
     /// If None, will clone the previous ReadDirState after the parent
@@ -19,16 +19,8 @@ pub struct ReadChildren<C: ClientState> {
 }
 
 impl<C: ClientState> ReadChildren<C> {
-    pub(crate) fn new(path: &Path) -> Self {
-        Self {
-            path: Arc::from(path),
-            error: None,
-            client_read_state: None,
-        }
-    }
-
     /// Return the error stored that occurred when reading the directory.
     pub fn error(&self) -> Option<&Error> {
-        self.error.as_ref()
+        todo!()
     }
 }

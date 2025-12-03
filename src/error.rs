@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::{ClientState, DirEntry};
+
 
 /// An error produced by recursively walking a directory.
 ///
@@ -25,12 +25,14 @@ use crate::{ClientState, DirEntry};
 /// [`io::Result`]: https://doc.rust-lang.org/stable/std/io/type.Result.html
 /// [impl]: struct.Error.html#impl-From%3CError%3E
 #[derive(Debug)]
+#[expect(dead_code)]
 pub struct Error {
     depth: usize,
     inner: ErrorInner,
 }
 
 #[derive(Debug)]
+#[expect(dead_code)]
 enum ErrorInner {
     Io {
         path: Option<PathBuf>,
@@ -51,15 +53,7 @@ impl Error {
     ///
     /// [`std::fs::read_dir`]: https://doc.rust-lang.org/stable/std/fs/fn.read_dir.html
     pub fn path(&self) -> Option<&Path> {
-        match self.inner {
-            ErrorInner::ThreadpoolBusy => None,
-            ErrorInner::Io { path: None, .. } => None,
-            ErrorInner::Io {
-                path: Some(ref path),
-                ..
-            } => Some(path),
-            ErrorInner::Loop { ref child, .. } => Some(child),
-        }
+        todo!()
     }
 
     /// Returns the path at which a cycle was detected.
@@ -75,10 +69,7 @@ impl Error {
     /// [`None`]: https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.None
     /// [`path`]: struct.Error.html#path
     pub fn loop_ancestor(&self) -> Option<&Path> {
-        match self.inner {
-            ErrorInner::Loop { ref ancestor, .. } => Some(ancestor),
-            _ => None,
-        }
+        todo!()
     }
 
     /// Returns the depth at which this error occurred relative to the root.
@@ -90,7 +81,7 @@ impl Error {
     /// [`new`]: struct.WalkDir.html#method.new
     /// [`WalkDir`]: struct.WalkDir.html
     pub fn depth(&self) -> usize {
-        self.depth
+        todo!()
     }
 
     /// Inspect the original [`io::Error`] if there is one.
@@ -152,17 +143,14 @@ impl Error {
     /// [`into_io_error`]: struct.Error.html#method.into_io_error
     /// [impl]: struct.Error.html#impl-From%3CError%3E
     pub fn io_error(&self) -> Option<&io::Error> {
-        match self.inner {
-            ErrorInner::Io { ref err, .. } => Some(err),
-            _ => None,
-        }
+        todo!()
     }
 
     /// Returns true if this error is due to a busy thread-pool that prevented its effective use.
     ///
     /// Note that business detection is timeout based, and we don't know if it would have been a deadlock or not.
     pub fn is_busy(&self) -> bool {
-        matches!(self.inner, ErrorInner::ThreadpoolBusy)
+        todo!()
     }
 
     /// Similar to [`io_error`] except consumes self to convert to the original
@@ -171,101 +159,29 @@ impl Error {
     /// [`io_error`]: struct.Error.html#method.io_error
     /// [`io::Error`]: https://doc.rust-lang.org/stable/std/io/struct.Error.html
     pub fn into_io_error(self) -> Option<io::Error> {
-        match self.inner {
-            ErrorInner::Io { err, .. } => Some(err),
-            _ => None,
-        }
+        todo!()
     }
 
-    pub(crate) fn busy() -> Self {
-        Error {
-            depth: 0,
-            inner: ErrorInner::ThreadpoolBusy,
-        }
-    }
-    pub(crate) fn from_path(depth: usize, pb: PathBuf, err: io::Error) -> Self {
-        Error {
-            depth,
-            inner: ErrorInner::Io {
-                path: Some(pb),
-                err,
-            },
-        }
-    }
 
-    pub(crate) fn from_entry<C: ClientState>(dent: &DirEntry<C>, err: io::Error) -> Self {
-        Error {
-            depth: dent.depth(),
-            inner: ErrorInner::Io {
-                path: Some(dent.path()),
-                err,
-            },
-        }
-    }
-
-    pub(crate) fn from_io(depth: usize, err: io::Error) -> Self {
-        Error {
-            depth,
-            inner: ErrorInner::Io { path: None, err },
-        }
-    }
-
-    pub(crate) fn from_loop(depth: usize, ancestor: &Path, child: &Path) -> Self {
-        Error {
-            depth,
-            inner: ErrorInner::Loop {
-                ancestor: ancestor.to_path_buf(),
-                child: child.to_path_buf(),
-            },
-        }
-    }
 }
 
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self.inner {
-            ErrorInner::Io { ref err, .. } => Some(err),
-            ErrorInner::Loop { .. } | ErrorInner::ThreadpoolBusy => None,
-        }
+        todo!()
     }
 
-    #[allow(deprecated)]
     fn description(&self) -> &str {
-        match self.inner {
-            ErrorInner::Io { ref err, .. } => err.description(),
-            ErrorInner::Loop { .. } => "file system loop found",
-            ErrorInner::ThreadpoolBusy => "thread-pool busy",
-        }
+        todo!()
     }
 
     fn cause(&self) -> Option<&dyn error::Error> {
-        self.source()
+        todo!()
     }
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.inner {
-            ErrorInner::ThreadpoolBusy => f.write_str("rayon thread-pool too busy or dependency loop detected - aborting before possibility of deadlock"),
-            ErrorInner::Io {
-                path: None,
-                ref err,
-            } => err.fmt(f),
-            ErrorInner::Io {
-                path: Some(ref path),
-                ref err,
-            } => write!(f, "IO error for operation on {}: {}", path.display(), err),
-            ErrorInner::Loop {
-                ref ancestor,
-                ref child,
-            } => write!(
-                f,
-                "File system loop found: \
-                 {} points to an ancestor {}",
-                child.display(),
-                ancestor.display()
-            ),
-        }
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
     }
 }
 
@@ -281,21 +197,7 @@ impl From<Error> for io::Error {
     /// [`io::Error`]: https://doc.rust-lang.org/stable/std/io/struct.Error.html
     /// ["inner error"]: https://doc.rust-lang.org/std/io/struct.Error.html#method.into_inner
     /// [`into_io_error`]: struct.WalkDir.html#method.into_io_error
-    fn from(walk_err: Error) -> io::Error {
-        let kind = match walk_err {
-            Error {
-                inner: ErrorInner::Io { ref err, .. },
-                ..
-            } => err.kind(),
-            Error {
-                inner: ErrorInner::Loop { .. },
-                ..
-            } => io::ErrorKind::Other,
-            Error {
-                inner: ErrorInner::ThreadpoolBusy,
-                ..
-            } => io::ErrorKind::Other,
-        };
-        io::Error::new(kind, walk_err)
+    fn from(_walk_err: Error) -> io::Error {
+        todo!()
     }
 }

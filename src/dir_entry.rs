@@ -4,7 +4,7 @@ use std::fs::{self, FileType};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::{ClientState, Error, ReadChildren, ReadDirSpec, Result};
+use crate::{ClientState, ReadChildren, Result};
 
 /// Representation of a file or directory.
 ///
@@ -12,6 +12,7 @@ use crate::{ClientState, Error, ReadChildren, ReadDirSpec, Result};
 /// `file_name`, `file_type`, and optionally `metadata` out of the underlying
 /// `std::fs::DirEntry`. This allows it to quickly drop the underlying file
 /// descriptor.
+#[expect(dead_code)]
 pub struct DirEntry<C: ClientState> {
     /// Depth of this entry relative to the root directory where the walk
     /// started.
@@ -38,75 +39,7 @@ pub struct DirEntry<C: ClientState> {
 }
 
 impl<C: ClientState> DirEntry<C> {
-    pub(crate) fn from_entry(
-        depth: usize,
-        parent_path: Arc<Path>,
-        fs_dir_entry: &fs::DirEntry,
-        follow_link_ancestors: Arc<Vec<Arc<Path>>>,
-    ) -> Result<Self> {
-        let file_type = fs_dir_entry
-            .file_type()
-            .map_err(|err| Error::from_path(depth, fs_dir_entry.path(), err))?;
-        let file_name = fs_dir_entry.file_name();
-        let read_children: Option<ReadChildren<C>> = if file_type.is_dir() {
-            Some(ReadChildren {
-                path: Arc::from(parent_path.join(&file_name)),
-                error: None,
-                client_read_state: None,
-            })
-        } else {
-            None
-        };
 
-        Ok(DirEntry {
-            depth,
-            file_name,
-            file_type,
-            parent_path,
-            read_children,
-            client_state: C::DirEntryState::default(),
-            follow_link: false,
-            follow_link_ancestors,
-        })
-    }
-
-    // Only used for root and when following links.
-    pub(crate) fn from_path(
-        depth: usize,
-        path: &Path,
-        follow_link: bool,
-        follow_link_ancestors: Arc<Vec<Arc<Path>>>,
-    ) -> Result<Self> {
-        let metadata = if follow_link {
-            fs::metadata(path).map_err(|err| Error::from_path(depth, path.to_owned(), err))?
-        } else {
-            fs::symlink_metadata(path)
-                .map_err(|err| Error::from_path(depth, path.to_owned(), err))?
-        };
-
-        let root_name = path.file_name().unwrap_or(path.as_os_str());
-
-        let read_children = if metadata.file_type().is_dir() {
-            Some(ReadChildren {
-                path: Arc::from(path),
-                error: None,
-                client_read_state: None,
-            })
-        } else {
-            None
-        };
-
-        Ok(DirEntry {
-            depth,
-            file_name: root_name.to_owned(),
-            file_type: metadata.file_type(),
-            parent_path: Arc::from(path.parent().map(Path::to_path_buf).unwrap_or_default()),
-            read_children,
-            client_state: C::DirEntryState::default(),
-            follow_link,
-            follow_link_ancestors,
-        })
-    }
 
     /// Return the file type for the file that this entry points to.
     ///
@@ -117,7 +50,7 @@ impl<C: ClientState> DirEntry<C> {
     ///
     /// [`follow_links`]: struct.WalkDir.html#method.follow_links
     pub fn file_type(&self) -> FileType {
-        self.file_type
+        todo!()
     }
 
     /// Return the file name of this entry.
@@ -125,7 +58,7 @@ impl<C: ClientState> DirEntry<C> {
     /// If this entry has no file name (e.g., `/`), then the full path is
     /// returned.
     pub fn file_name(&self) -> &OsStr {
-        &self.file_name
+        todo!()
     }
 
     /// Returns the depth at which this entry was created relative to the root.
@@ -134,14 +67,14 @@ impl<C: ClientState> DirEntry<C> {
     /// to the `new` function on `WalkDir`. Its direct descendants have depth
     /// `1`, and their descendants have depth `2`, and so on.
     pub fn depth(&self) -> usize {
-        self.depth
+        todo!()
     }
 
     /// Path to the file/directory represented by this entry.
     ///
     /// The path is created by joining `parent_path` with `file_name`.
     pub fn path(&self) -> PathBuf {
-        self.parent_path.join(&self.file_name)
+        todo!()
     }
 
     /// Returns `true` if and only if this entry was created from a symbolic
@@ -155,7 +88,7 @@ impl<C: ClientState> DirEntry<C> {
     /// [`follow_links`]: struct.WalkDir.html#method.follow_links
     /// [`std::fs::read_link(entry.path())`]: https://doc.rust-lang.org/stable/std/fs/fn.read_link.html
     pub fn path_is_symlink(&self) -> bool {
-        self.file_type.is_symlink() || self.follow_link
+        todo!()
     }
 
     /// Return the metadata for the file that this entry points to.
@@ -181,60 +114,19 @@ impl<C: ClientState> DirEntry<C> {
     /// [`std::fs::metadata`]: https://doc.rust-lang.org/std/fs/fn.metadata.html
     /// [`std::fs::symlink_metadata`]: https://doc.rust-lang.org/stable/std/fs/fn.symlink_metadata.html
     pub fn metadata(&self) -> Result<fs::Metadata> {
-        if self.follow_link {
-            fs::metadata(self.path())
-        } else {
-            fs::symlink_metadata(self.path())
-        }
-        .map_err(|err| Error::from_entry(self, err))
+        todo!()
     }
 
     /// Reference to the path of the directory containing this entry.
     pub fn parent_path(&self) -> &Path {
-        &self.parent_path
+        todo!()
     }
 
-    pub(crate) fn read_children_spec(
-        &self,
-        client_read_state: C::ReadDirState,
-    ) -> Option<ReadDirSpec<C>> {
-        self.read_children
-            .as_ref()
-            .map(|read_children| ReadDirSpec {
-                depth: self.depth,
-                client_read_state: read_children
-                    .client_read_state
-                    .clone()
-                    .unwrap_or(client_read_state),
-                path: read_children.path.clone(),
-                follow_link_ancestors: self.follow_link_ancestors.clone(),
-            })
-    }
 
-    pub(crate) fn follow_symlink(&self) -> Result<Self> {
-        let path = self.path();
-        let origins = self.follow_link_ancestors.clone();
-        let dir_entry = DirEntry::from_path(self.depth, &path, true, origins)?;
-
-        if dir_entry.file_type.is_dir() {
-            let target = fs::read_link(&path).map_err(|err| Error::from_io(self.depth, err))?;
-            for ancestor in self.follow_link_ancestors.iter().rev() {
-                if target.as_path() == ancestor.as_ref() {
-                    return Err(Error::from_loop(
-                        self.depth,
-                        ancestor.as_ref(),
-                        path.as_ref(),
-                    ));
-                }
-            }
-        }
-
-        Ok(dir_entry)
-    }
 }
 
 impl<C: ClientState> fmt::Debug for DirEntry<C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "DirEntry({:?})", self.path())
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!()
     }
 }

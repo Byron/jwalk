@@ -1,9 +1,7 @@
 use serial_test::serial;
 use std::env;
-use std::fs;
-use std::path::PathBuf;
 
-mod util;
+pub mod util;
 
 use jwalk::*;
 use util::{parallelism_options, test_dir};
