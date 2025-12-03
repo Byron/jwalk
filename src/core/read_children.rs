@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::{ClientState, Error};
 
-// A reduced, but public, version of ReadDirSpec
+/// A reduced, but public, version of ReadDirSpec
 pub struct ReadChildren<C: ClientState> {
     /// Path that will be used to read child entries. This is
     /// automatically set for directories.
@@ -27,6 +27,7 @@ impl<C: ClientState> ReadChildren<C> {
         }
     }
 
+    /// Return the error stored that occurred when reading the directory.
     pub fn error(&self) -> Option<&Error> {
         self.error.as_ref()
     }
