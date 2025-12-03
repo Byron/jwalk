@@ -1,25 +1,13 @@
-use lazy_static::lazy_static;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 mod util;
 
 use jwalk::*;
-use util::Dir;
-
-fn parallelism_options() -> Vec<Parallelism> {
-    vec![
-        Parallelism::Serial,
-        Parallelism::RayonDefaultPool {
-            busy_timeout: std::time::Duration::from_secs(1),
-        },
-        Parallelism::RayonNewPool(2),
-    ]
-}
+use util::{parallelism_options, test_dir, Dir, ReadOnlyDir};
 
 #[test]
 fn empty() {
@@ -100,8 +88,7 @@ fn empty_file_follow() {
 #[test]
 fn one_dir() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a");
+        let dir = ReadOnlyDir::from_fixture("make-one-dir.sh");
 
         let wd = WalkDir::new(dir.path()).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -120,8 +107,7 @@ fn one_dir() {
 #[test]
 fn one_file() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.touch("a");
+        let dir = ReadOnlyDir::from_fixture("make-one-file.sh");
 
         let wd = WalkDir::new(dir.path()).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -140,9 +126,7 @@ fn one_file() {
 #[test]
 fn one_dir_one_file() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("foo");
-        dir.touch("foo/a");
+        let dir = ReadOnlyDir::from_fixture("make-basic.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -160,9 +144,7 @@ fn one_dir_one_file() {
 #[test]
 fn many_files() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("foo");
-        dir.touch_all(&["foo/a", "foo/b", "foo/c"]);
+        let dir = ReadOnlyDir::from_fixture("make-many-files.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -182,10 +164,7 @@ fn many_files() {
 #[test]
 fn many_dirs() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("foo/a");
-        dir.mkdirp("foo/b");
-        dir.mkdirp("foo/c");
+        let dir = ReadOnlyDir::from_fixture("make-many-dirs.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -205,11 +184,7 @@ fn many_dirs() {
 #[test]
 fn many_mixed() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("foo/a");
-        dir.mkdirp("foo/c");
-        dir.mkdirp("foo/e");
-        dir.touch_all(&["foo/b", "foo/d", "foo/f"]);
+        let dir = ReadOnlyDir::from_fixture("make-many-mixed.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -232,10 +207,8 @@ fn many_mixed() {
 #[test]
 fn nested() {
     for parallelism in parallelism_options() {
+        let dir = ReadOnlyDir::from_fixture("make-nested.sh");
         let nested = PathBuf::from("a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z");
-        let dir = Dir::tmp();
-        dir.mkdirp(&nested);
-        dir.touch(nested.join("A"));
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -278,11 +251,7 @@ fn nested() {
 #[test]
 fn siblings() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("foo");
-        dir.mkdirp("bar");
-        dir.touch_all(&["foo/a", "foo/b"]);
-        dir.touch_all(&["bar/a", "bar/b"]);
+        let dir = ReadOnlyDir::from_fixture("make-siblings.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -304,9 +273,7 @@ fn siblings() {
 #[test]
 fn sym_root_file_nofollow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.touch("a");
-        dir.symlink_file("a", "a-link");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-file.sh");
 
         let wd = WalkDir::new(dir.join("a-link")).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -320,7 +287,7 @@ fn sym_root_file_nofollow() {
 
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(0, link.depth());
 
@@ -337,9 +304,7 @@ fn sym_root_file_nofollow() {
 #[test]
 fn sym_root_file_follow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.touch("a");
-        dir.symlink_file("a", "a-link");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-file.sh");
 
         let wd = WalkDir::new(dir.join("a-link"))
             .sort(true)
@@ -355,7 +320,7 @@ fn sym_root_file_follow() {
 
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(0, link.depth());
 
@@ -372,10 +337,7 @@ fn sym_root_file_follow() {
 #[test]
 fn sym_root_dir_nofollow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a");
-        dir.symlink_dir("a", "a-link");
-        dir.touch("a/zzz");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-dir.sh");
 
         let wd = WalkDir::new(dir.join("a-link")).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -389,7 +351,7 @@ fn sym_root_dir_nofollow() {
 
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(0, link.depth());
 
@@ -410,10 +372,7 @@ fn sym_root_dir_nofollow() {
 #[test]
 fn sym_root_dir_follow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a");
-        dir.symlink_dir("a", "a-link");
-        dir.touch("a/zzz");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-dir.sh");
 
         let wd = WalkDir::new(dir.join("a-link"))
             .sort(true)
@@ -430,7 +389,7 @@ fn sym_root_dir_follow() {
 
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(0, link.depth());
 
@@ -451,9 +410,7 @@ fn sym_root_dir_follow() {
 #[test]
 fn sym_file_nofollow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.touch("a");
-        dir.symlink_file("a", "a-link");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-file.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -469,7 +426,7 @@ fn sym_file_nofollow() {
         assert!(!src.path_is_symlink());
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(1, src.depth());
         assert_eq!(1, link.depth());
@@ -489,9 +446,7 @@ fn sym_file_nofollow() {
 #[test]
 fn sym_file_follow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.touch("a");
-        dir.symlink_file("a", "a-link");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-file.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).follow_links(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -507,7 +462,7 @@ fn sym_file_follow() {
         assert!(!src.path_is_symlink());
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(1, src.depth());
         assert_eq!(1, link.depth());
@@ -527,10 +482,7 @@ fn sym_file_follow() {
 #[test]
 fn sym_dir_nofollow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a");
-        dir.symlink_dir("a", "a-link");
-        dir.touch("a/zzz");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-dir.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -546,7 +498,7 @@ fn sym_dir_nofollow() {
         assert!(!src.path_is_symlink());
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(1, src.depth());
         assert_eq!(1, link.depth());
@@ -566,10 +518,7 @@ fn sym_dir_nofollow() {
 #[test]
 fn sym_dir_follow() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a");
-        dir.symlink_dir("a", "a-link");
-        dir.touch("a/zzz");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-root-dir.sh");
 
         let wd = WalkDir::new(dir.path()).follow_links(true).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -585,7 +534,7 @@ fn sym_dir_follow() {
         assert!(!src.path_is_symlink());
         assert!(link.path_is_symlink());
 
-        assert_eq!(dir.join("a"), fs::read_link(link.path()).unwrap());
+        assert_eq!(PathBuf::from("a"), fs::read_link(link.path()).unwrap());
 
         assert_eq!(1, src.depth());
         assert_eq!(1, link.depth());
@@ -654,8 +603,7 @@ fn sym_loop_detect() {
 #[test]
 fn sym_self_loop_no_error() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.symlink_file("a", "a");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-self-loop.sh");
 
         let wd = WalkDir::new(dir.path()).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -681,8 +629,7 @@ fn sym_self_loop_no_error() {
 #[test]
 fn sym_file_self_loop_io_error() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.symlink_file("a", "a");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-self-loop.sh");
 
         let wd = WalkDir::new(dir.path()).follow_links(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -704,8 +651,7 @@ fn sym_file_self_loop_io_error() {
 #[test]
 fn sym_dir_self_loop_io_error() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.symlink_dir("a", "a");
+        let dir = ReadOnlyDir::from_fixture("make-symlink-self-loop.sh");
 
         let wd = WalkDir::new(dir.path()).follow_links(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -727,8 +673,7 @@ fn sym_dir_self_loop_io_error() {
 #[test]
 fn min_depth_1() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test.sh");
 
         let wd = WalkDir::new(dir.path()).min_depth(1).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -742,8 +687,7 @@ fn min_depth_1() {
 #[test]
 fn min_depth_2() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test.sh");
 
         let wd = WalkDir::new(dir.path()).min_depth(2).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -757,8 +701,7 @@ fn min_depth_2() {
 #[test]
 fn max_depth_0() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test.sh");
 
         let wd = WalkDir::new(dir.path()).max_depth(0).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -772,8 +715,7 @@ fn max_depth_0() {
 #[test]
 fn max_depth_1() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test.sh");
 
         let wd = WalkDir::new(dir.path()).max_depth(1).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -787,8 +729,7 @@ fn max_depth_1() {
 #[test]
 fn max_depth_2() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test.sh");
 
         let wd = WalkDir::new(dir.path()).max_depth(2).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -806,8 +747,7 @@ fn max_depth_2() {
 #[test]
 fn min_max_depth_diff_0() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b/c");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test-3.sh");
 
         let wd = WalkDir::new(dir.path())
             .min_depth(2)
@@ -825,8 +765,7 @@ fn min_max_depth_diff_0() {
 #[test]
 fn min_max_depth_diff_1() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("a/b/c");
+        let dir = ReadOnlyDir::from_fixture("make-depth-test-3.sh");
 
         let wd = WalkDir::new(dir.path())
             .min_depth(1)
@@ -844,9 +783,7 @@ fn min_max_depth_diff_1() {
 #[test]
 fn sort() {
     for parallelism in parallelism_options() {
-        let dir = Dir::tmp();
-        dir.mkdirp("foo/bar/baz/abc");
-        dir.mkdirp("quux");
+        let dir = ReadOnlyDir::from_fixture("make-sort-test.sh");
 
         let wd = WalkDir::new(dir.path()).sort(true).parallelism(parallelism);
         let r = dir.run_recursive(wd);
@@ -862,16 +799,6 @@ fn sort() {
         ];
         assert_eq!(expected, r.paths());
     }
-}
-
-fn test_dir() -> (PathBuf, tempfile::TempDir) {
-    let template = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/test_dir");
-    let temp_dir = tempfile::tempdir().unwrap();
-    let options = fs_extra::dir::CopyOptions::new();
-    fs_extra::dir::copy(&template, &temp_dir, &options).unwrap();
-    let mut test_dir = temp_dir.path().to_path_buf();
-    test_dir.push(template.file_name().unwrap());
-    (test_dir, temp_dir)
 }
 
 fn local_paths(walk_dir: WalkDir) -> Vec<String> {
@@ -1111,68 +1038,6 @@ fn walk_root() {
             .filter_map(|each| Some(each.ok()?.path()))
             .collect();
         assert_eq!(paths.first().unwrap().to_str().unwrap(), "/");
-    }
-}
-
-lazy_static! {
-    static ref RELATIVE_MUTEX: Mutex<()> = Mutex::new(());
-}
-
-#[test]
-fn walk_relative_1() {
-    for parallelism in parallelism_options() {
-        let _shared = RELATIVE_MUTEX.lock().unwrap();
-        let (test_dir, _temp_dir) = test_dir();
-
-        env::set_current_dir(test_dir).unwrap();
-
-        let paths = local_paths(WalkDir::new(".").sort(true).parallelism(parallelism.clone()));
-
-        assert_eq!(
-            paths,
-            vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 1/d.txt (2)",
-                "group 2 (1)",
-                "group 2/e.txt (2)",
-            ]
-        );
-
-        let root_dir_entry = WalkDir::new("..").parallelism(parallelism).into_iter().next().unwrap().unwrap();
-        assert_eq!(&root_dir_entry.file_name, "..");
-    }
-}
-
-#[test]
-fn walk_relative_2() {
-    for parallelism in parallelism_options() {
-        let _shared = RELATIVE_MUTEX.lock().unwrap();
-        let (test_dir, _temp_dir) = test_dir();
-
-        env::set_current_dir(test_dir.join("group 1")).unwrap();
-
-        let paths = local_paths(WalkDir::new("..").sort(true).parallelism(parallelism.clone()));
-
-        assert_eq!(
-            paths,
-            vec![
-                " (0)",
-                "a.txt (1)",
-                "b.txt (1)",
-                "c.txt (1)",
-                "group 1 (1)",
-                "group 1/d.txt (2)",
-                "group 2 (1)",
-                "group 2/e.txt (2)",
-            ]
-        );
-
-        let root_dir_entry = WalkDir::new(".").parallelism(parallelism).into_iter().next().unwrap().unwrap();
-        assert_eq!(&root_dir_entry.file_name, ".");
     }
 }
 

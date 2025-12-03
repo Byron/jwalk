@@ -7,5 +7,6 @@
 # Lock file (not committed for libraries)
 Cargo.lock
 
-# Generated test fixtures (regenerated automatically when needed)
-/tests/fixtures/generated-archives/
+# Generated test fixtures - archives and extracted platform-specific contents
+tests/fixtures/generated-archives/
+tests/fixtures/generated-do-not-edit/
