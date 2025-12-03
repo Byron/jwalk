@@ -7,6 +7,79 @@ use std::result;
 
 use jwalk::*;
 
+/// Helper to create a read-only fixture from a script
+pub fn fixture(script_name: &str) -> PathBuf {
+    gix_testtools::scripted_fixture_read_only(script_name).unwrap()
+}
+
+/// Returns representative parallelism options for testing
+pub fn parallelism_options() -> Vec<Parallelism> {
+    vec![
+        Parallelism::Serial,
+        Parallelism::RayonDefaultPool {
+            busy_timeout: std::time::Duration::from_secs(1),
+        },
+        Parallelism::RayonNewPool(2),
+    ]
+}
+
+/// Creates a temporary test directory with the contents of tests/assets/test_dir
+pub fn test_dir() -> (PathBuf, tempfile::TempDir) {
+    let template = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/assets/test_dir");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let options = fs_extra::dir::CopyOptions::new();
+    fs_extra::dir::copy(&template, &temp_dir, &options).unwrap();
+    let mut test_dir = temp_dir.path().to_path_buf();
+    test_dir.push(template.file_name().unwrap());
+    (test_dir, temp_dir)
+}
+
+/// A helper for managing a read-only directory created from a fixture script.
+#[derive(Debug, Clone)]
+pub struct ReadOnlyDir {
+    path: PathBuf,
+}
+
+impl ReadOnlyDir {
+    /// Create a read-only directory from a fixture script.
+    pub fn from_fixture(script_name: &str) -> ReadOnlyDir {
+        let path = gix_testtools::scripted_fixture_read_only(script_name).unwrap();
+        // Convert to absolute path to match Dir::tmp() behavior
+        let path = env::current_dir().unwrap().join(path);
+        ReadOnlyDir { path }
+    }
+
+    /// Return the path to this directory.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Return a path joined to the path to this directory.
+    pub fn join<P: AsRef<Path>>(&self, path: P) -> PathBuf {
+        self.path.join(path)
+    }
+
+    /// Run the given iterator and return the result as a distinct collection
+    /// of directory entries and errors.
+    pub fn run_recursive<C, I>(&self, it: I) -> RecursiveResults<C>
+    where
+        C: ClientState,
+        I: IntoIterator<Item = result::Result<DirEntry<C>, Error>>,
+    {
+        let mut results = RecursiveResults {
+            ents: vec![],
+            errs: vec![],
+        };
+        for result in it {
+            match result {
+                Ok(ent) => results.ents.push(ent),
+                Err(err) => results.errs.push(err),
+            }
+        }
+        results
+    }
+}
+
 /// Create an error from a format!-like syntax.
 #[macro_export]
 macro_rules! err {
