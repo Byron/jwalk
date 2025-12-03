@@ -800,7 +800,7 @@ fn local_paths(walk_dir: WalkDir) -> Vec<String> {
         .into_iter()
         .map(|each_result| {
             let each_entry = each_result.unwrap();
-            if let Some(err) = each_entry.read_children_error.as_ref() {
+            if let Some(err) = each_entry.read_children.as_ref().and_then(|rc| rc.error()) {
                 panic!("should not encounter any child errors :{:?}", err);
             }
             let path = each_entry.path();
@@ -1004,7 +1004,11 @@ fn error_when_path_removed_durring_iteration() {
 
     // group 2 content error IS set, since path is removed when try read_dir for
     // group 2 path.
-    let _ = group_2.read_children_error.is_some();
+    assert!(group_2
+        .read_children
+        .as_ref()
+        .and_then(|rc| rc.error())
+        .is_some());
 
     // done!
     assert!(iter.next().is_none());
@@ -1111,7 +1115,7 @@ fn filter_group_children_with_process_read_dir() {
                 children.iter_mut().for_each(|each_result| {
                     if let Ok(each) = each_result {
                         if each.file_name.to_string_lossy().starts_with("group") {
-                            each.read_children_path = None;
+                            each.read_children = None;
                         }
                     }
                 });
@@ -1127,6 +1131,42 @@ fn filter_group_children_with_process_read_dir() {
             "group 1 (1)",
             "group 2 (1)",
         ]
+    );
+}
+
+#[test]
+fn pass_readdir_state_with_process_read_dir() {
+    let (test_dir, _temp_dir) = test_dir();
+    let iter = WalkDirGeneric::<(Option<String>, ())>::new(&test_dir)
+        .sort(true)
+        .process_read_dir(|_depth, path, state, children| {
+            if let Some(state) = state.as_deref() {
+                let fname = path.file_name().and_then(|fname| fname.to_str()).unwrap();
+                assert_eq!(state, fname);
+            }
+            children.retain_mut(|each_result| {
+                if let Ok(each) = each_result {
+                    let fname = each.file_name().to_str().unwrap().to_owned();
+                    if let Some(ref mut rc) = each.read_children {
+                        rc.client_read_state = Some(Some(fname));
+                        return true;
+                    }
+                }
+                false
+            });
+        })
+        .into_iter();
+    assert_eq!(
+        iter.map(|e| {
+            let e = e.unwrap();
+            format!(
+                "{} ({})",
+                e.path().strip_prefix(&test_dir).unwrap().to_str().unwrap(),
+                e.depth()
+            )
+        })
+        .collect::<Vec<_>>(),
+        vec![" (0)", "group 1 (1)", "group 2 (1)",]
     );
 }
 
