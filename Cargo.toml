@@ -2,7 +2,7 @@
 name = "jwalk"
 version = "0.9.0"
 authors = ["Jesse Grosjean <jesse@hogbaysoftware.com>", "Sebastian Thiel <byronimo@gmail.com>"]
-description = "Filesystem walk performed in parallel with streamed and sorted results."
+description = "Use `dua-core` instead"
 documentation = "https://docs.rs/jwalk"
 homepage = "https://github.com/Byron/jwalk"
 repository = "https://github.com/Byron/jwalk"
@@ -11,6 +11,9 @@ keywords = ["directory", "recursive", "walk", "iterator", "parallel"]
 categories = ["filesystem", "concurrency"]
 license = "MIT"
 edition = "2021"
+
+[badges]
+maintenance = { status = "deprecated" }
 
 [dependencies]
 rayon = "1.5"
