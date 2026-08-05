@@ -1,3 +1,7 @@
+# Unmaintained
+
+This crate is no longer maintained or supported. Use [`dua-core`](https://crates.io/crates/dua-core) instead.
+
 jwalk
 =======
 
