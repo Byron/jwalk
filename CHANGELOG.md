@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.9.0 (2026-08-05)
 
 This crate is no longer maintained or supported. Use [`dua-core`](https://crates.io/crates/dua-core) instead.
 
@@ -19,7 +19,7 @@ This crate is no longer maintained or supported. Use [`dua-core`](https://crates
 
 <csr-read-only-do-not-edit/>
 
- - 22 commits contributed to the release.
+ - 20 commits contributed to the release.
  - 1329 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -37,9 +37,7 @@ This crate is no longer maintained or supported. Use [`dua-core`](https://crates
 <details><summary>view details</summary>
 
  * **Uncategorized**
-    - THIS CRATE IS UNMAINTAINED ([`a934b55`](https://github.com/Byron/jwalk/commit/a934b55c06af8bf1fc55460d2425732dafc8ee91))
-    - Rewrite by Sonnet ([`fa787c1`](https://github.com/Byron/jwalk/commit/fa787c1cc7f64bcb1e570c6d23b33526a8d08643))
-    - Remove all function implementations prior to rewrite. ([`c6b16ee`](https://github.com/Byron/jwalk/commit/c6b16ee8d5a14bbdb699d00756036b3eddd304e1))
+    - THIS CRATE IS UNMAINTAINED ([`79c0ed8`](https://github.com/Byron/jwalk/commit/79c0ed82bae292ccaccd8611a99f581b48fc8ad3))
     - Merge pull request #46 from Byron/rewrite ([`891125e`](https://github.com/Byron/jwalk/commit/891125eec76b61931669cef2fa40279c927e91c1))
     - Use `gix-testtools` to allow state reuse for directories and simpler testing ([`2ea7375`](https://github.com/Byron/jwalk/commit/2ea7375cd2d0b02d2b6e52dda62417528a19a320))
     - Cleanup .gitignore ([`08d4681`](https://github.com/Byron/jwalk/commit/08d468196263d38fe4435bf828dc1a9a2c2ec923))
